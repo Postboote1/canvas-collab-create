@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -385,20 +384,33 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }, 100);
   };
 
-  // Override the default exportAsImage and exportAsPDF functions
+  // Attach export methods directly to the component
   useEffect(() => {
     if (!currentCanvas) return;
     
-    const originalExportAsImage = currentCanvas.exportAsImage;
-    const originalExportAsPDF = currentCanvas.exportAsPDF;
+    // Instead of trying to override properties that don't exist,
+    // we'll update the canvas context to use our export methods
+    const handleExport = () => {
+      handleExportAsImage();
+    };
     
-    currentCanvas.exportAsImage = handleExportAsImage;
-    currentCanvas.exportAsPDF = handleExportAsPDF;
+    const handleExportPDF = () => {
+      handleExportAsPDF();
+    };
+    
+    // Pass these methods to any code that might need them
+    if (typeof window !== 'undefined') {
+      // @ts-ignore - Adding custom methods to window for external access
+      window.__canvasExportMethods = {
+        exportAsImage: handleExportAsImage,
+        exportAsPDF: handleExportAsPDF
+      };
+    }
     
     return () => {
-      if (currentCanvas) {
-        currentCanvas.exportAsImage = originalExportAsImage;
-        currentCanvas.exportAsPDF = originalExportAsPDF;
+      if (typeof window !== 'undefined') {
+        // @ts-ignore - Clean up
+        delete window.__canvasExportMethods;
       }
     };
   }, [currentCanvas, handleExportAsImage, handleExportAsPDF]);
