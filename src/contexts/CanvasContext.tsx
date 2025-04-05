@@ -1,11 +1,10 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 
 export interface CanvasElement {
   id: string;
-  type: 'card' | 'text' | 'drawing' | 'image' | 'arrow';
+  type: 'card' | 'text' | 'drawing' | 'image' | 'arrow' | 'shape';
   content?: string;
   x: number;
   y: number;
@@ -17,6 +16,7 @@ export interface CanvasElement {
   imageUrl?: string;
   fromId?: string;
   toId?: string;
+  shapeType?: 'circle' | 'triangle' | 'diamond';
 }
 
 export interface Canvas {
@@ -38,16 +38,16 @@ interface CanvasContextType {
   loadCanvas: (id: string) => Promise<boolean>;
   loadCanvasByCode: (code: string) => Promise<boolean>;
   saveCanvas: () => Promise<boolean>;
-  saveCurrentCanvasToAccount: () => Promise<boolean>;
+  saveCurrentCanvasToAccount: () Promise<boolean>;
   addElement: (element: Omit<CanvasElement, 'id'>) => void;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   clearCanvas: () => void;
   exportAsImage: () => void;
   exportAsPDF: () => void;
-  exportCanvasData: () => string;
+  exportCanvasData: () string;
   importCanvasData: (data: string) => boolean;
-  generateJoinCode: () => string;
+  generateJoinCode: () string;
   generateQRCode: (joinCode: string) => string;
 }
 
