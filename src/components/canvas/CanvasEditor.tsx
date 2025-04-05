@@ -270,6 +270,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
   
+  // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !canvasRef.current || readOnly) return;
     
@@ -279,15 +280,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     reader.onload = (event) => {
       if (!event.target?.result) return;
       
-      const center = {
-        x: (window.innerWidth / 2 - viewportPosition.x) / scale,
-        y: (window.innerHeight / 2 - viewportPosition.y) / scale
-      };
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const centerX = ((window.innerWidth / 2) - rect.left) / scale + viewportPosition.x;
+      const centerY = ((window.innerHeight / 2) - rect.top) / scale + viewportPosition.y;
       
       const newImage: Omit<CanvasElementType, 'id'> = {
         type: 'image',
-        x: center.x - 100,
-        y: center.y - 75,
+        x: centerX - 100,
+        y: centerY - 75,
         width: 200,
         height: 150,
         imageUrl: event.target.result as string

@@ -220,7 +220,14 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <Button
           variant="outline"
           size="sm"
-          onClick={exportAsImage}
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.__canvasExportMethods) {
+              // @ts-ignore
+              window.__canvasExportMethods.exportAsImage();
+            } else {
+              exportAsImage();
+            }
+          }}
           title="Export as Image"
         >
           <Download size={18} />
@@ -229,7 +236,14 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <Button
           variant="outline"
           size="sm"
-          onClick={exportAsPDF}
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.__canvasExportMethods) {
+              // @ts-ignore
+              window.__canvasExportMethods.exportAsPDF();
+            } else {
+              exportAsPDF();
+            }
+          }}
           title="Export as PDF"
         >
           <FileUp size={18} />

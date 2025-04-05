@@ -54,6 +54,9 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     // Add event listeners for resize
     document.addEventListener('mousemove', handleResizeMove);
     document.addEventListener('mouseup', handleResizeEnd);
+    
+    // Prevent event propagation
+    e.stopPropagation();
   };
   
   const handleResizeMove = (e: MouseEvent) => {
@@ -86,7 +89,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     
     return (
       <div 
-        className="absolute bottom-0 right-0 w-4 h-4 bg-canvas-blue cursor-se-resize z-10"
+        className="absolute bottom-0 right-0 w-4 h-4 bg-blue-500 cursor-se-resize z-10 rounded-bl"
         onMouseDown={handleResizeStart}
       />
     );
@@ -178,7 +181,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         return (
           <div
             ref={elementRef}
-            className={`absolute card-canvas rounded-md p-3 ${selected ? 'ring-2 ring-canvas-blue' : ''}`}
+            className={`absolute card-canvas rounded-md p-3 ${selected ? 'ring-2 ring-blue-500' : ''}`}
             style={{
               left: element.x,
               top: element.y,
@@ -210,7 +213,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       case 'text':
         return (
           <div
-            className={`absolute ${selected ? 'ring-2 ring-canvas-blue' : ''}`}
+            className={`absolute ${selected ? 'ring-2 ring-blue-500' : ''}`}
             style={{
               left: element.x,
               top: element.y,
@@ -266,7 +269,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         return (
           <div
             ref={elementRef}
-            className={`absolute ${selected ? 'ring-2 ring-canvas-blue' : ''}`}
+            className={`absolute ${selected ? 'ring-2 ring-blue-500' : ''}`}
             style={{
               left: element.x,
               top: element.y,
