@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -14,10 +15,10 @@ interface CanvasEditorProps {
 
 const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
-  const { currentCanvas, addElement, updateElement, saveCanvas } = useCanvas();
+  const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
   const { isConnected, connect, disconnect, sendMessage } = useWebSocket();
   
-  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -64,7 +65,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     if (activeTool === 'select') {
       // Check if we're clicking on an element
       const clickedElement = currentCanvas?.elements.find(element => {
-        if (element.type === 'card' || element.type === 'text' || element.type === 'image') {
+        if (element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') {
           return (
             x >= element.x &&
             x <= element.x + (element.width || 0) &&
@@ -134,64 +135,83 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       setIsDrawing(true);
       setDrawingPoints([{ x, y }]);
     } else if (activeTool === 'arrow') {
-      if (arrowStart) {
-        // If we already have a start point, create the arrow
-        const startElement = currentCanvas?.elements.find(el => el.id === arrowStart);
-        const endElement = currentCanvas?.elements.find(element => {
-          if (element.type === 'card' || element.type === 'text' || element.type === 'image') {
-            return (
-              x >= element.x &&
-              x <= element.x + (element.width || 0) &&
-              y >= element.y &&
-              y <= element.y + (element.height || 0)
-            );
-          }
-          return false;
-        });
-        
-        if (startElement && endElement && startElement.id !== endElement.id) {
-          const newArrow: Omit<CanvasElementType, 'id'> = {
-            type: 'arrow',
-            x: startElement.x + (startElement.width || 0) / 2,
-            y: startElement.y + (startElement.height || 0) / 2,
-            fromId: startElement.id,
-            toId: endElement.id,
-            color: activeColor
-          };
-          
-          addElement(newArrow);
-          
-          if (isConnected) {
-            sendMessage({
-              type: 'addElement',
-              payload: newArrow,
-              canvasId: currentCanvas!.id
-            });
-          }
+      // Find element under the cursor
+      const element = currentCanvas?.elements.find(el => {
+        if (el.type === 'card' || el.type === 'text' || el.type === 'image' || el.type === 'shape') {
+          return (
+            x >= el.x &&
+            x <= el.x + (el.width || 0) &&
+            y >= el.y &&
+            y <= el.y + (el.height || 0)
+          );
         }
-        
-        setArrowStart(null);
-        // Reset to select tool after adding an arrow
-        setActiveTool('select');
-      } else {
-        // Get the element we're starting from
-        const element = currentCanvas?.elements.find(element => {
-          if (element.type === 'card' || element.type === 'text' || element.type === 'image') {
-            return (
-              x >= element.x &&
-              x <= element.x + (element.width || 0) &&
-              y >= element.y &&
-              y <= element.y + (element.height || 0)
-            );
+        return false;
+      });
+      
+      if (element) {
+        if (arrowStart) {
+          // If we already have a start point, create the arrow
+          const startElement = currentCanvas?.elements.find(el => el.id === arrowStart);
+          
+          if (startElement && startElement.id !== element.id) {
+            const newArrow: Omit<CanvasElementType, 'id'> = {
+              type: 'arrow',
+              x: startElement.x + (startElement.width || 0) / 2,
+              y: startElement.y + (startElement.height || 0) / 2,
+              fromId: startElement.id,
+              toId: element.id,
+              color: activeColor
+            };
+            
+            addElement(newArrow);
+            
+            if (isConnected) {
+              sendMessage({
+                type: 'addElement',
+                payload: newArrow,
+                canvasId: currentCanvas!.id
+              });
+            }
+            
+            setArrowStart(null);
+            // Toast to indicate arrow was created
+            toast.success('Arrow created');
+            // Reset to select tool after adding an arrow
+            setActiveTool('select');
+          } else {
+            toast.error("Can't connect an element to itself");
           }
-          return false;
-        });
-        
-        if (element) {
+        } else {
+          // Set the start element
           setArrowStart(element.id);
           toast.info('Now click on another element to create an arrow');
         }
+      } else {
+        toast.error('Please click on an element to create an arrow');
       }
+    } else if (activeTool === 'circle' || activeTool === 'triangle' || activeTool === 'diamond') {
+      const newShape: Omit<CanvasElementType, 'id'> = {
+        type: 'shape',
+        shapeType: activeTool,
+        x,
+        y,
+        width: 100,
+        height: 100,
+        color: activeColor
+      };
+      
+      addElement(newShape);
+      
+      if (isConnected) {
+        sendMessage({
+          type: 'addElement',
+          payload: newShape,
+          canvasId: currentCanvas!.id
+        });
+      }
+      
+      // Reset to select tool after adding a shape
+      setActiveTool('select');
     }
   };
   
@@ -248,6 +268,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
+      
+      // Reset to select tool after drawing
+      setActiveTool('select');
     }
     
     setIsDrawing(false);
@@ -268,6 +291,21 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         y: prev.y + e.deltaY / scale
       }));
     }
+  };
+  
+  // Handle element deletion
+  const handleDeleteElement = (id: string) => {
+    deleteElement(id);
+    
+    if (isConnected) {
+      sendMessage({
+        type: 'deleteElement',
+        payload: id,
+        canvasId: currentCanvas!.id
+      });
+    }
+    
+    setSelectedElement(null);
   };
   
   // Handle image upload
@@ -384,23 +422,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }, 100);
   };
 
-  // Attach export methods directly to the component
+  // Attach export methods to window for global access
   useEffect(() => {
     if (!currentCanvas) return;
     
-    // Instead of trying to override properties that don't exist,
-    // we'll update the canvas context to use our export methods
-    const handleExport = () => {
-      handleExportAsImage();
-    };
-    
-    const handleExportPDF = () => {
-      handleExportAsPDF();
-    };
-    
-    // Pass these methods to any code that might need them
+    // Pass these methods to window object for external access
     if (typeof window !== 'undefined') {
-      // @ts-ignore - Adding custom methods to window for external access
       window.__canvasExportMethods = {
         exportAsImage: handleExportAsImage,
         exportAsPDF: handleExportAsPDF
@@ -409,14 +436,13 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     
     return () => {
       if (typeof window !== 'undefined') {
-        // @ts-ignore - Clean up
         delete window.__canvasExportMethods;
       }
     };
   }, [currentCanvas, handleExportAsImage, handleExportAsPDF]);
   
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full dark:bg-zinc-800">
       <CanvasToolbar 
         activeTool={activeTool} 
         setActiveTool={setActiveTool} 
@@ -435,7 +461,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       >
         <div 
           ref={canvasRef}
-          className={`absolute ${currentCanvas?.isInfinite ? 'infinite-canvas' : 'w-full h-full'} canvas-background`}
+          className={`absolute ${currentCanvas?.isInfinite ? 'infinite-canvas' : 'w-full h-full'} canvas-background dark:bg-zinc-900`}
           style={{
             transform: `scale(${scale}) translate(${-viewportPosition.x}px, ${-viewportPosition.y}px)`,
             transformOrigin: '0 0'
@@ -489,6 +515,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                     });
                   }
                 }}
+                onDeleteElement={handleDeleteElement}
                 readOnly={readOnly}
                 allElements={currentCanvas.elements}
               />
@@ -509,7 +536,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
             </svg>
           )}
           
-          {/* Draw connection indicator when creating an arrow */}
+          {/* Draw arrow connection indicator */}
           {arrowStart && (
             <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center pointer-events-none z-50">
               <div className="bg-black bg-opacity-70 text-white px-4 py-2 rounded-md">
@@ -521,8 +548,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       </div>
       
       {isConnected && (
-        <div className="fixed bottom-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm animate-pulse-light">
-          Live: {isConnected ? 'Connected' : 'Disconnected'}
+        <div className="fixed bottom-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm animate-pulse-light z-50">
+          Live: Connected
         </div>
       )}
     </div>

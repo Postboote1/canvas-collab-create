@@ -8,6 +8,7 @@ import CanvasShare from '@/components/canvas/CanvasShare';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Helmet } from 'react-helmet';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 const CanvasPage: React.FC = () => {
   const { currentCanvas, saveCurrentCanvasToAccount } = useCanvas();
@@ -44,7 +45,7 @@ const CanvasPage: React.FC = () => {
   };
   
   return (
-    <>
+    <ThemeProvider>
       <Helmet>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -52,14 +53,14 @@ const CanvasPage: React.FC = () => {
         <title>{currentCanvas.name} - Canvas Collaboration</title>
       </Helmet>
       
-      <div className="h-screen flex flex-col">
-        <div className="bg-white border-b py-2 px-4 flex items-center justify-between">
+      <div className="h-screen flex flex-col dark:bg-zinc-900">
+        <div className="bg-card border-b py-2 px-4 flex items-center justify-between dark:border-zinc-700">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold truncate max-w-xs">
               {currentCanvas.name}
             </h1>
             {isAnonymous && (
-              <span className="text-sm text-gray-500">(Temporary)</span>
+              <span className="text-sm text-muted-foreground">(Temporary)</span>
             )}
           </div>
           
@@ -103,7 +104,7 @@ const CanvasPage: React.FC = () => {
           <CanvasEditor readOnly={!isAnonymous && !isCreator} />
         </div>
       </div>
-    </>
+    </ThemeProvider>
   );
 };
 
