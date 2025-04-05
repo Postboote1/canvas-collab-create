@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -5,6 +6,8 @@ import { useWebSocket } from '@/contexts/WebSocketContext';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasElement from './CanvasElement';
 import { toast } from 'sonner';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface CanvasEditorProps {
   readOnly?: boolean;
@@ -16,6 +19,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { isConnected, connect, disconnect, sendMessage } = useWebSocket();
   
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow'>('select');
+  const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
@@ -26,6 +30,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const [scale, setScale] = useState(1);
   
   const canvasRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   
   // Connect to WebSocket when canvas changes
   useEffect(() => {
@@ -89,7 +94,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         y,
         width: 200,
         height: 150,
-        color: '#ffffff'
+        color: activeColor
       };
       
       addElement(newCard);
@@ -101,6 +106,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
+      
+      // Reset to select tool after adding a card
+      setActiveTool('select');
     } else if (activeTool === 'text') {
       const newText: Omit<CanvasElementType, 'id'> = {
         type: 'text',
@@ -108,7 +116,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         x,
         y,
         fontSize: 16,
-        color: '#000000'
+        color: activeColor
       };
       
       addElement(newText);
@@ -120,6 +128,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
+      
+      // Reset to select tool after adding text
+      setActiveTool('select');
     } else if (activeTool === 'draw') {
       setIsDrawing(true);
       setDrawingPoints([{ x, y }]);
@@ -146,7 +157,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
             y: startElement.y + (startElement.height || 0) / 2,
             fromId: startElement.id,
             toId: endElement.id,
-            color: '#000000'
+            color: activeColor
           };
           
           addElement(newArrow);
@@ -161,6 +172,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         }
         
         setArrowStart(null);
+        // Reset to select tool after adding an arrow
+        setActiveTool('select');
       } else {
         // Get the element we're starting from
         const element = currentCanvas?.elements.find(element => {
@@ -224,7 +237,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         points: drawingPoints,
         x: drawingPoints[0].x,
         y: drawingPoints[0].y,
-        color: '#000000'
+        color: activeColor
       };
       
       addElement(newDrawing);
@@ -290,11 +303,105 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
+      
+      // Reset to select tool after adding an image
+      setActiveTool('select');
     };
     
     reader.readAsDataURL(file);
     e.target.value = '';
   };
+
+  // Implement actual export functionality
+  const handleExportAsImage = () => {
+    if (!contentRef.current) {
+      toast.error('Canvas not ready');
+      return;
+    }
+
+    const tempScale = scale;
+    setScale(1);
+    
+    // Wait for the next render with correct scale before capturing
+    setTimeout(() => {
+      html2canvas(contentRef.current!, {
+        backgroundColor: 'white',
+        scale: window.devicePixelRatio,
+        allowTaint: true,
+        useCORS: true,
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `${currentCanvas?.name || 'canvas'}_export.png`;
+        link.href = imgData;
+        link.click();
+        
+        // Restore scale
+        setScale(tempScale);
+        toast.success('Canvas exported as image');
+      }).catch(err => {
+        console.error('Export failed:', err);
+        toast.error('Failed to export canvas');
+        setScale(tempScale);
+      });
+    }, 100);
+  };
+
+  const handleExportAsPDF = () => {
+    if (!contentRef.current) {
+      toast.error('Canvas not ready');
+      return;
+    }
+
+    const tempScale = scale;
+    setScale(1);
+    
+    // Wait for the next render with correct scale before capturing
+    setTimeout(() => {
+      html2canvas(contentRef.current!, {
+        backgroundColor: 'white',
+        scale: window.devicePixelRatio,
+        allowTaint: true,
+        useCORS: true,
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'landscape',
+          unit: 'px',
+          format: [canvas.width, canvas.height]
+        });
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`${currentCanvas?.name || 'canvas'}_export.pdf`);
+        
+        // Restore scale
+        setScale(tempScale);
+        toast.success('Canvas exported as PDF');
+      }).catch(err => {
+        console.error('Export failed:', err);
+        toast.error('Failed to export canvas');
+        setScale(tempScale);
+      });
+    }, 100);
+  };
+
+  // Override the default exportAsImage and exportAsPDF functions
+  useEffect(() => {
+    if (!currentCanvas) return;
+    
+    const originalExportAsImage = currentCanvas.exportAsImage;
+    const originalExportAsPDF = currentCanvas.exportAsPDF;
+    
+    currentCanvas.exportAsImage = handleExportAsImage;
+    currentCanvas.exportAsPDF = handleExportAsPDF;
+    
+    return () => {
+      if (currentCanvas) {
+        currentCanvas.exportAsImage = originalExportAsImage;
+        currentCanvas.exportAsPDF = originalExportAsPDF;
+      }
+    };
+  }, [currentCanvas, handleExportAsImage, handleExportAsPDF]);
   
   return (
     <div className="flex flex-col h-full">
@@ -306,6 +413,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         readOnly={readOnly}
         scale={scale}
         setScale={setScale}
+        activeColor={activeColor}
+        setActiveColor={setActiveColor}
       />
       
       <div 
@@ -323,31 +432,56 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
+          onTouchStart={(e) => {
+            const touch = e.touches[0];
+            if (touch) {
+              const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+              });
+              handleCanvasMouseDown(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+            }
+          }}
+          onTouchMove={(e) => {
+            const touch = e.touches[0];
+            if (touch) {
+              const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+              });
+              handleCanvasMouseMove(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+            }
+          }}
+          onTouchEnd={() => {
+            handleCanvasMouseUp();
+          }}
         >
-          {/* Draw current elements */}
-          {currentCanvas?.elements.map(element => (
-            <CanvasElement 
-              key={element.id}
-              element={element}
-              selected={element.id === selectedElement}
-              onUpdateElement={(updates) => {
-                updateElement(element.id, updates);
-                
-                if (isConnected) {
-                  sendMessage({
-                    type: 'updateElement',
-                    payload: {
-                      id: element.id,
-                      updates
-                    },
-                    canvasId: currentCanvas.id
-                  });
-                }
-              }}
-              readOnly={readOnly}
-              allElements={currentCanvas.elements}
-            />
-          ))}
+          <div ref={contentRef} className="absolute top-0 left-0 w-full h-full">
+            {/* Draw current elements */}
+            {currentCanvas?.elements.map(element => (
+              <CanvasElement 
+                key={element.id}
+                element={element}
+                selected={element.id === selectedElement}
+                onUpdateElement={(updates) => {
+                  updateElement(element.id, updates);
+                  
+                  if (isConnected) {
+                    sendMessage({
+                      type: 'updateElement',
+                      payload: {
+                        id: element.id,
+                        updates
+                      },
+                      canvasId: currentCanvas.id
+                    });
+                  }
+                }}
+                readOnly={readOnly}
+                allElements={currentCanvas.elements}
+              />
+            ))}
+          </div>
           
           {/* Draw current stroke */}
           {isDrawing && drawingPoints.length > 1 && (
@@ -355,7 +489,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
               <polyline
                 points={drawingPoints.map(p => `${p.x},${p.y}`).join(' ')}
                 fill="none"
-                stroke="#000000"
+                stroke={activeColor}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"

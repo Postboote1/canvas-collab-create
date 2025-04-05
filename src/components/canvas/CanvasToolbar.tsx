@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   MousePointer,
@@ -13,11 +13,17 @@ import {
   FileUp,
   ZoomIn,
   ZoomOut,
-  Trash
+  Trash,
+  Palette
 } from 'lucide-react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface CanvasToolbarProps {
   activeTool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow';
@@ -27,6 +33,8 @@ interface CanvasToolbarProps {
   readOnly: boolean;
   scale: number;
   setScale: (scale: number) => void;
+  activeColor: string;
+  setActiveColor: (color: string) => void;
 }
 
 const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
@@ -36,9 +44,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onImageUpload,
   readOnly,
   scale,
-  setScale
+  setScale,
+  activeColor,
+  setActiveColor
 }) => {
   const { exportAsImage, exportAsPDF, exportCanvasData, importCanvasData, clearCanvas } = useCanvas();
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   
   const tools = [
     { name: 'Select', tool: 'select', icon: <MousePointer size={18} /> },
@@ -106,6 +117,48 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             {icon}
           </Button>
         ))}
+        
+        {!readOnly && (
+          <Popover open={isColorPickerOpen} onOpenChange={setIsColorPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                title="Color"
+                className="relative"
+              >
+                <Palette size={18} />
+                <div 
+                  className="absolute bottom-0 right-0 w-2 h-2 rounded-full border border-gray-300" 
+                  style={{ backgroundColor: activeColor }}
+                />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Color</p>
+                <div className="flex gap-2">
+                  {['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFFFFF'].map(color => (
+                    <div
+                      key={color}
+                      className={`w-6 h-6 rounded cursor-pointer ${activeColor === color ? 'ring-2 ring-blue-500' : 'border border-gray-300'}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setActiveColor(color)}
+                    />
+                  ))}
+                </div>
+                <div>
+                  <input 
+                    type="color" 
+                    value={activeColor} 
+                    onChange={(e) => setActiveColor(e.target.value)} 
+                    className="w-full" 
+                  />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
       
       <div className="flex items-center gap-2">

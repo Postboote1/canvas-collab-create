@@ -7,6 +7,7 @@ import CanvasEditor from '@/components/canvas/CanvasEditor';
 import CanvasShare from '@/components/canvas/CanvasShare';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { Helmet } from 'react-helmet';
 
 const CanvasPage: React.FC = () => {
   const { currentCanvas, saveCurrentCanvasToAccount } = useCanvas();
@@ -43,57 +44,66 @@ const CanvasPage: React.FC = () => {
   };
   
   return (
-    <div className="h-screen flex flex-col">
-      <div className="bg-white border-b py-2 px-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold truncate max-w-xs">
-            {currentCanvas.name}
-          </h1>
-          {isAnonymous && (
-            <span className="text-sm text-gray-500">(Temporary)</span>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {isAnonymous && (
+    <>
+      <Helmet>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <title>{currentCanvas.name} - Canvas Collaboration</title>
+      </Helmet>
+      
+      <div className="h-screen flex flex-col">
+        <div className="bg-white border-b py-2 px-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold truncate max-w-xs">
+              {currentCanvas.name}
+            </h1>
+            {isAnonymous && (
+              <span className="text-sm text-gray-500">(Temporary)</span>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2 flex-wrap">
+            {isAnonymous && (
+              <Button
+                variant="default"
+                size="sm"
+                className="flex items-center gap-1"
+                onClick={handleSaveToAccount}
+                disabled={isSaving}
+              >
+                <Save size={16} />
+                {isSaving ? 'Saving...' : 'Save to Account'}
+              </Button>
+            )}
+            
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
               className="flex items-center gap-1"
-              onClick={handleSaveToAccount}
-              disabled={isSaving}
+              onClick={() => navigate('/presentation')}
             >
-              <Save size={16} />
-              {isSaving ? 'Saving...' : 'Save to Account'}
+              <Play size={16} />
+              Present
             </Button>
-          )}
-          
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-            onClick={() => navigate('/presentation')}
-          >
-            <Play size={16} />
-            Present
-          </Button>
-          
-          <CanvasShare />
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/')}
-          >
-            Exit
-          </Button>
+            
+            <CanvasShare />
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/')}
+            >
+              Exit
+            </Button>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-hidden">
+          <CanvasEditor readOnly={!isAnonymous && !isCreator} />
         </div>
       </div>
-      
-      <div className="flex-1 overflow-hidden">
-        <CanvasEditor readOnly={!isAnonymous && !isCreator} />
-      </div>
-    </div>
+    </>
   );
 };
 
