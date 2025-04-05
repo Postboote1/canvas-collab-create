@@ -34,9 +34,11 @@ interface CanvasContextType {
   userCanvases: Canvas[];
   currentCanvas: Canvas | null;
   createCanvas: (name: string, isInfinite: boolean) => Promise<Canvas>;
+  createTempCanvas: (name: string, isInfinite: boolean) => Promise<Canvas>;
   loadCanvas: (id: string) => Promise<boolean>;
   loadCanvasByCode: (code: string) => Promise<boolean>;
   saveCanvas: () => Promise<boolean>;
+  saveCurrentCanvasToAccount: () => Promise<boolean>;
   addElement: (element: Omit<CanvasElement, 'id'>) => void;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
@@ -62,7 +64,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       loadUserCanvases();
     } else {
       setUserCanvases([]);
-      setCurrentCanvas(null);
+      // Don't clear currentCanvas when logout to allow anonymous usage
     }
   }, [user]);
 
@@ -140,6 +142,87 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Add a new method to create temporary canvases without login
+  const createTempCanvas = async (name: string, isInfinite: boolean): Promise<Canvas> => {
+    const newCanvas: Canvas = {
+      id: `temp_canvas_${Date.now()}`,
+      name,
+      elements: [],
+      createdBy: 'anonymous',
+      createdAt: new Date().toISOString(),
+      joinCode: generateJoinCode(),
+      isInfinite
+    };
+    
+    // Set as current canvas but don't save to any user account
+    setCurrentCanvas(newCanvas);
+    
+    // Track canvas creation for analytics
+    trackCanvasCreation();
+    
+    toast.success('Temporary canvas created!');
+    toast.info('Sign in to save this canvas to your account.');
+    
+    return newCanvas;
+  };
+
+  // Add a method to save the current temporary canvas to a user account
+  const saveCurrentCanvasToAccount = async (): Promise<boolean> => {
+    if (!user) {
+      toast.error('You must be logged in to save a canvas');
+      return false;
+    }
+    
+    if (!currentCanvas) {
+      toast.error('No canvas to save');
+      return false;
+    }
+    
+    // Check if user has reached the limit of 5 canvases
+    if (userCanvases.length >= 5) {
+      toast.error('You can only have up to 5 canvases. Please delete one first.');
+      return false;
+    }
+    
+    try {
+      // Get users from localStorage
+      const usersStr = localStorage.getItem('canvasUsers') || '[]';
+      const users = JSON.parse(usersStr);
+      
+      const userIndex = users.findIndex((u: any) => u.id === user.id);
+      if (userIndex !== -1) {
+        if (!users[userIndex].canvases) {
+          users[userIndex].canvases = [];
+        }
+        
+        // Create a new canvas object with the current user as the owner
+        const savedCanvas: Canvas = {
+          ...currentCanvas,
+          id: `canvas_${Date.now()}`,
+          createdBy: user.id,
+          createdAt: new Date().toISOString(),
+        };
+        
+        users[userIndex].canvases.push(savedCanvas);
+        localStorage.setItem('canvasUsers', JSON.stringify(users));
+        
+        // Update state
+        setUserCanvases([...userCanvases, savedCanvas]);
+        setCurrentCanvas(savedCanvas);
+        
+        toast.success('Canvas saved to your account!');
+        return true;
+      } else {
+        toast.error('User not found');
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to save canvas to account:', error);
+      toast.error('Failed to save canvas to account');
+      return false;
+    }
+  };
+
   const loadCanvas = async (id: string): Promise<boolean> => {
     try {
       const canvas = userCanvases.find(canvas => canvas.id === id);
@@ -193,9 +276,15 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const saveCanvas = async (): Promise<boolean> => {
-    if (!user || !currentCanvas) {
-      toast.error('You must be logged in and have a canvas open to save');
+    if (!currentCanvas) {
+      toast.error('No canvas to save');
       return false;
+    }
+    
+    // If anonymous user, just return true without saving
+    if (!user || currentCanvas.createdBy === 'anonymous') {
+      toast.info('Sign in to save this canvas to your account');
+      return true;
     }
     
     try {
@@ -412,9 +501,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       userCanvases,
       currentCanvas,
       createCanvas,
+      createTempCanvas,
       loadCanvas,
       loadCanvasByCode,
       saveCanvas,
+      saveCurrentCanvasToAccount,
       addElement,
       updateElement,
       deleteElement,

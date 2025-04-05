@@ -14,6 +14,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import CreateCanvasPage from "./pages/CreateCanvasPage";
+import CreateTempCanvasPage from "./pages/CreateTempCanvasPage";
 import CanvasPage from "./pages/CanvasPage";
 import JoinPage from "./pages/JoinPage";
 import AdminPage from "./pages/AdminPage";
@@ -38,6 +39,7 @@ const App = () => (
                   <Route path="/register" element={<RegisterPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/create" element={<CreateCanvasPage />} />
+                  <Route path="/create-temp" element={<CreateTempCanvasPage />} />
                   <Route path="/canvas" element={<CanvasPage />} />
                   <Route path="/join" element={<JoinPage />} />
                   <Route path="/join/:code" element={<JoinPage />} />

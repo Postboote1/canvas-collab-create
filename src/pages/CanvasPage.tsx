@@ -1,22 +1,23 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Play } from 'lucide-react';
+import { Play, Save } from 'lucide-react';
 import CanvasEditor from '@/components/canvas/CanvasEditor';
 import CanvasShare from '@/components/canvas/CanvasShare';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 const CanvasPage: React.FC = () => {
-  const { currentCanvas } = useCanvas();
-  const { user } = useAuth();
+  const { currentCanvas, saveCurrentCanvasToAccount } = useCanvas();
+  const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
+  const [isSaving, setIsSaving] = useState(false);
   
   // Redirect if no canvas is loaded
   useEffect(() => {
     if (!currentCanvas) {
-      navigate('/dashboard');
+      navigate('/create-temp');
     }
   }, [currentCanvas, navigate]);
   
@@ -25,6 +26,21 @@ const CanvasPage: React.FC = () => {
   }
   
   const isCreator = user && currentCanvas.createdBy === user.id;
+  const isAnonymous = currentCanvas.createdBy === 'anonymous';
+  
+  const handleSaveToAccount = async () => {
+    if (!isLoggedIn()) {
+      navigate('/login');
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      await saveCurrentCanvasToAccount();
+    } finally {
+      setIsSaving(false);
+    }
+  };
   
   return (
     <div className="h-screen flex flex-col">
@@ -33,9 +49,25 @@ const CanvasPage: React.FC = () => {
           <h1 className="text-xl font-bold truncate max-w-xs">
             {currentCanvas.name}
           </h1>
+          {isAnonymous && (
+            <span className="text-sm text-gray-500">(Temporary)</span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
+          {isAnonymous && (
+            <Button
+              variant="default"
+              size="sm"
+              className="flex items-center gap-1"
+              onClick={handleSaveToAccount}
+              disabled={isSaving}
+            >
+              <Save size={16} />
+              {isSaving ? 'Saving...' : 'Save to Account'}
+            </Button>
+          )}
+          
           <Button
             variant="outline"
             size="sm"
@@ -51,7 +83,7 @@ const CanvasPage: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/')}
           >
             Exit
           </Button>
@@ -59,7 +91,7 @@ const CanvasPage: React.FC = () => {
       </div>
       
       <div className="flex-1 overflow-hidden">
-        <CanvasEditor readOnly={!isCreator} />
+        <CanvasEditor readOnly={!isAnonymous && !isCreator} />
       </div>
     </div>
   );

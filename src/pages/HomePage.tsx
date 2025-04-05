@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -21,9 +20,9 @@ const HomePage: React.FC = () => {
               Create, share, and present ideas with a powerful collaborative canvas tool for teams.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to={isLoggedIn() ? "/create" : "/register"}>
+              <Link to="/create-temp">
                 <Button size="lg" className="w-full sm:w-auto">
-                  {isLoggedIn() ? "Create Canvas" : "Sign Up Free"}
+                  Create Canvas
                 </Button>
               </Link>
               <Link to="/join">
@@ -32,6 +31,11 @@ const HomePage: React.FC = () => {
                 </Button>
               </Link>
             </div>
+            {!isLoggedIn() && (
+              <p className="mt-4 text-sm text-gray-500">
+                <Link to="/register" className="text-canvas-blue hover:underline">Sign up</Link> or <Link to="/login" className="text-canvas-blue hover:underline">log in</Link> to save your canvases
+              </p>
+            )}
           </div>
         </div>
         
@@ -141,9 +145,9 @@ const HomePage: React.FC = () => {
               <p className="text-xl mb-8 max-w-2xl mx-auto">
                 Join today and create your first collaborative canvas in minutes.
               </p>
-              <Link to={isLoggedIn() ? "/create" : "/register"}>
+              <Link to="/create-temp">
                 <Button size="lg" variant="outline" className="bg-white text-canvas-blue hover:bg-gray-100 border-white">
-                  {isLoggedIn() ? "Create Canvas" : "Sign Up Free"}
+                  Create Canvas
                 </Button>
               </Link>
             </div>

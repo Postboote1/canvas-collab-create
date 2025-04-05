@@ -1,9 +1,9 @@
 
-import React, { useEffect } from 'react';
-import HomePage from './HomePage';
+import React from 'react';
+import { Navigate } from 'react-router-dom';
 
 const Index = () => {
-  return <HomePage />;
+  return <Navigate to="/create-temp" />;
 };
 
 export default Index;
