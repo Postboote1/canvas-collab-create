@@ -1,7 +1,6 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCanvas, CanvasElement } from '@/contexts/CanvasContext';
+import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasElement from './CanvasElement';
@@ -83,7 +82,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         setSelectedElement(null);
       }
     } else if (activeTool === 'card') {
-      const newCard: Omit<CanvasElement, 'id'> = {
+      const newCard: Omit<CanvasElementType, 'id'> = {
         type: 'card',
         content: 'New Card',
         x,
@@ -103,7 +102,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         });
       }
     } else if (activeTool === 'text') {
-      const newText: Omit<CanvasElement, 'id'> = {
+      const newText: Omit<CanvasElementType, 'id'> = {
         type: 'text',
         content: 'Double-click to edit',
         x,
@@ -141,7 +140,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         });
         
         if (startElement && endElement && startElement.id !== endElement.id) {
-          const newArrow: Omit<CanvasElement, 'id'> = {
+          const newArrow: Omit<CanvasElementType, 'id'> = {
             type: 'arrow',
             x: startElement.x + (startElement.width || 0) / 2,
             y: startElement.y + (startElement.height || 0) / 2,
@@ -220,7 +219,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     if (readOnly) return;
     
     if (isDrawing && activeTool === 'draw' && drawingPoints.length > 1) {
-      const newDrawing: Omit<CanvasElement, 'id'> = {
+      const newDrawing: Omit<CanvasElementType, 'id'> = {
         type: 'drawing',
         points: drawingPoints,
         x: drawingPoints[0].x,
@@ -273,7 +272,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         y: (window.innerHeight / 2 - viewportPosition.y) / scale
       };
       
-      const newImage: Omit<CanvasElement, 'id'> = {
+      const newImage: Omit<CanvasElementType, 'id'> = {
         type: 'image',
         x: center.x - 100,
         y: center.y - 75,
