@@ -38,16 +38,16 @@ interface CanvasContextType {
   loadCanvas: (id: string) => Promise<boolean>;
   loadCanvasByCode: (code: string) => Promise<boolean>;
   saveCanvas: () => Promise<boolean>;
-  saveCurrentCanvasToAccount: () Promise<boolean>;
+  saveCurrentCanvasToAccount: () => Promise<boolean>;
   addElement: (element: Omit<CanvasElement, 'id'>) => void;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   clearCanvas: () => void;
   exportAsImage: () => void;
   exportAsPDF: () => void;
-  exportCanvasData: () string;
+  exportCanvasData: () => string;
   importCanvasData: (data: string) => boolean;
-  generateJoinCode: () string;
+  generateJoinCode: () => string;
   generateQRCode: (joinCode: string) => string;
 }
 
