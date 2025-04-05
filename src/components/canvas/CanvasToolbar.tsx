@@ -14,29 +14,20 @@ import {
   ZoomIn,
   ZoomOut,
   Trash,
-  Palette,
-  Circle,
-  Triangle,
-  Diamond,
-  Sun,
-  Moon
+  Palette
 } from 'lucide-react';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useTheme } from '@/contexts/ThemeContext';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface CanvasToolbarProps {
-  activeTool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond';
-  setActiveTool: (tool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond') => void;
+  activeTool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow';
+  setActiveTool: (tool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow') => void;
   onSave: () => void;
   onImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   readOnly: boolean;
@@ -59,19 +50,15 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 }) => {
   const { exportAsImage, exportAsPDF, exportCanvasData, importCanvasData, clearCanvas } = useCanvas();
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const { theme, setTheme } = useTheme();
   
   const tools = [
-    { name: 'Select', tool: 'select' as const, icon: <MousePointer size={18} />, tooltip: 'Select and move objects' },
-    { name: 'Card', tool: 'card' as const, icon: <Square size={18} />, tooltip: 'Add a text card' },
-    { name: 'Text', tool: 'text' as const, icon: <Type size={18} />, tooltip: 'Add text' },
-    { name: 'Draw', tool: 'draw' as const, icon: <Pencil size={18} />, tooltip: 'Free drawing' },
-    { name: 'Image', tool: 'image' as const, icon: <Image size={18} />, tooltip: 'Add image' },
-    { name: 'Arrow', tool: 'arrow' as const, icon: <ArrowRight size={18} />, tooltip: 'Connect objects with arrows' },
-    { name: 'Circle', tool: 'circle' as const, icon: <Circle size={18} />, tooltip: 'Add circle shape' },
-    { name: 'Triangle', tool: 'triangle' as const, icon: <Triangle size={18} />, tooltip: 'Add triangle shape' },
-    { name: 'Diamond', tool: 'diamond' as const, icon: <Diamond size={18} />, tooltip: 'Add diamond shape' }
-  ];
+    { name: 'Select', tool: 'select', icon: <MousePointer size={18} /> },
+    { name: 'Card', tool: 'card', icon: <Square size={18} /> },
+    { name: 'Text', tool: 'text', icon: <Type size={18} /> },
+    { name: 'Draw', tool: 'draw', icon: <Pencil size={18} /> },
+    { name: 'Image', tool: 'image', icon: <Image size={18} /> },
+    { name: 'Arrow', tool: 'arrow', icon: <ArrowRight size={18} /> }
+  ] as const;
   
   const handleImportCanvas = () => {
     const input = document.createElement('input');
@@ -115,234 +102,172 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     
     toast.success('Canvas exported successfully');
   };
-
-  const handleToolClick = (tool: typeof activeTool) => {
-    setActiveTool(tool);
-  };
-  
-  const handleExportAsImage = () => {
-    if (typeof window !== 'undefined' && window.__canvasExportMethods) {
-      window.__canvasExportMethods.exportAsImage();
-    } else {
-      exportAsImage();
-    }
-  };
-  
-  const handleExportAsPDF = () => {
-    if (typeof window !== 'undefined' && window.__canvasExportMethods) {
-      window.__canvasExportMethods.exportAsPDF();
-    } else {
-      exportAsPDF();
-    }
-  };
   
   return (
-    <Card className="border-b bg-card shadow-sm">
-      <CardContent className="p-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {!readOnly && (
-            <div className="flex flex-wrap items-center p-1 bg-muted/20 rounded-md">
-              {tools.map(({ name, tool, icon, tooltip }) => (
-                <Tooltip key={tool} delayDuration={300}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={activeTool === tool ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleToolClick(tool)}
-                      className="h-8 px-2"
-                    >
-                      {icon}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">{tooltip}</TooltipContent>
-                </Tooltip>
-              ))}
-            </div>
-          )}
-          
-          {!readOnly && (
-            <Popover open={isColorPickerOpen} onOpenChange={setIsColorPickerOpen}>
-              <TooltipTrigger asChild>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="relative h-8"
-                  >
-                    <Palette size={18} />
-                    <div 
-                      className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-gray-300" 
-                      style={{ backgroundColor: activeColor }}
+    <div className="border-b bg-white p-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap gap-1">
+        {!readOnly && tools.map(({ name, tool, icon }) => (
+          <Button
+            key={tool}
+            variant={activeTool === tool ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setActiveTool(tool)}
+            title={name}
+          >
+            {icon}
+          </Button>
+        ))}
+        
+        {!readOnly && (
+          <Popover open={isColorPickerOpen} onOpenChange={setIsColorPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                title="Color"
+                className="relative"
+              >
+                <Palette size={18} />
+                <div 
+                  className="absolute bottom-0 right-0 w-2 h-2 rounded-full border border-gray-300" 
+                  style={{ backgroundColor: activeColor }}
+                />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Color</p>
+                <div className="flex gap-2">
+                  {['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFFFFF'].map(color => (
+                    <div
+                      key={color}
+                      className={`w-6 h-6 rounded cursor-pointer ${activeColor === color ? 'ring-2 ring-blue-500' : 'border border-gray-300'}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setActiveColor(color)}
                     />
-                  </Button>
-                </PopoverTrigger>
-              </TooltipTrigger>
-              <PopoverContent className="w-auto p-3">
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm font-medium">Color</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['#FFFFFF', '#F87171', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#000000'].map(color => (
-                      <div
-                        key={color}
-                        className={`w-6 h-6 rounded cursor-pointer ${activeColor === color ? 'ring-2 ring-blue-500' : 'border border-gray-300'}`}
-                        style={{ backgroundColor: color }}
-                        onClick={() => setActiveColor(color)}
-                      />
-                    ))}
-                  </div>
-                  <div>
-                    <input 
-                      type="color" 
-                      value={activeColor} 
-                      onChange={(e) => setActiveColor(e.target.value)} 
-                      className="w-full" 
-                    />
-                  </div>
+                  ))}
                 </div>
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
+                <div>
+                  <input 
+                    type="color" 
+                    value={activeColor} 
+                    onChange={(e) => setActiveColor(e.target.value)} 
+                    className="w-full" 
+                  />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <ZoomOut size={14} className="text-gray-500" />
+        <Slider
+          className="w-24"
+          value={[scale * 100]}
+          min={10}
+          max={200}
+          step={5}
+          onValueChange={(value) => setScale(value[0] / 100)}
+        />
+        <ZoomIn size={14} className="text-gray-500" />
+        <span className="text-xs text-gray-500 w-12">{Math.round(scale * 100)}%</span>
+      </div>
+      
+      <div className="flex flex-wrap gap-1">
+        {!readOnly && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSave}
+              title="Save Canvas"
+            >
+              <Save size={18} />
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearCanvas}
+              title="Clear Canvas"
+            >
+              <Trash size={18} />
+            </Button>
+            
+            <label>
+              <Button
+                variant="outline"
+                size="sm"
+                title="Upload Image"
+                asChild
+              >
+                <span>
+                  <Image size={18} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onImageUpload}
+                  />
+                </span>
+              </Button>
+            </label>
+          </>
+        )}
         
-        <div className="flex items-center gap-2">
-          <ZoomOut size={14} className="text-muted-foreground" />
-          <Slider
-            className="w-24"
-            value={[scale * 100]}
-            min={10}
-            max={200}
-            step={5}
-            onValueChange={(value) => setScale(value[0] / 100)}
-          />
-          <ZoomIn size={14} className="text-muted-foreground" />
-          <span className="text-xs text-muted-foreground w-12">{Math.round(scale * 100)}%</span>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.__canvasExportMethods) {
+              // @ts-ignore
+              window.__canvasExportMethods.exportAsImage();
+            } else {
+              exportAsImage();
+            }
+          }}
+          title="Export as Image"
+        >
+          <Download size={18} />
+        </Button>
         
-        <div className="flex items-center gap-2">
-          <div className="flex items-center">
-            <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <Switch
-              checked={theme === 'dark'}
-              onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
-              className="ml-1"
-            />
-          </div>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.__canvasExportMethods) {
+              // @ts-ignore
+              window.__canvasExportMethods.exportAsPDF();
+            } else {
+              exportAsPDF();
+            }
+          }}
+          title="Export as PDF"
+        >
+          <FileUp size={18} />
+        </Button>
         
-        <div className="flex flex-wrap gap-1">
-          {!readOnly && (
-            <>
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onSave}
-                    className="h-8"
-                  >
-                    <Save size={18} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Save Canvas</TooltipContent>
-              </Tooltip>
-              
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={clearCanvas}
-                    className="h-8"
-                  >
-                    <Trash size={18} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Clear Canvas</TooltipContent>
-              </Tooltip>
-              
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                    className="h-8"
-                  >
-                    <label>
-                      <Image size={18} />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={onImageUpload}
-                      />
-                    </label>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Upload Image</TooltipContent>
-              </Tooltip>
-            </>
-          )}
-          
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportAsImage}
-                className="h-8"
-              >
-                <Download size={18} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Export as Image</TooltipContent>
-          </Tooltip>
-          
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportAsPDF}
-                className="h-8"
-              >
-                <FileUp size={18} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Export as PDF</TooltipContent>
-          </Tooltip>
-          
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportCanvas}
-                className="h-8"
-              >
-                Export
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Export Canvas</TooltipContent>
-          </Tooltip>
-          
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleImportCanvas}
-                className="h-8"
-              >
-                Import
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Import Canvas</TooltipContent>
-          </Tooltip>
-        </div>
-      </CardContent>
-    </Card>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportCanvas}
+          title="Export Canvas"
+        >
+          Export
+        </Button>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleImportCanvas}
+          title="Import Canvas"
+        >
+          Import
+        </Button>
+      </div>
+    </div>
   );
 };
 
