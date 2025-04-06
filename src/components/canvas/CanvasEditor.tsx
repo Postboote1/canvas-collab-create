@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -61,16 +60,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
     
-    // Handle right-click (contextmenu is handled separately)
+    // Handle right-click for canvas panning
     if (e.button === 2) {
-      // Right mouse button for panning the canvas
       e.preventDefault();
       setIsPanning(true);
       setPanStartPosition({ x: e.clientX, y: e.clientY });
       return;
     }
     
-    // Handle left-click
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale + viewportPosition.x;
     const y = (e.clientY - rect.top) / scale + viewportPosition.y;
@@ -248,11 +245,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
   
-  // Handle mouse move on canvas
+  // Handle mouse move on canvas with improved panning
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
     
-    // Handle panning with right mouse button
+    // Improved panning with right mouse button
     if (isPanning) {
       const deltaX = e.clientX - panStartPosition.x;
       const deltaY = e.clientY - panStartPosition.y;
@@ -347,15 +344,24 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     e.preventDefault();
   };
   
-  // Handle canvas wheel for both zooming and scrolling
+  // Handle canvas wheel for both zooming and scrolling with improved horizontal scrolling
   const handleCanvasWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    // Zoom with ctrl/cmd + wheel
     if (e.ctrlKey || e.metaKey) {
-      // Zoom
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       setScale(prevScale => Math.max(0.1, Math.min(prevScale * delta, 5)));
-    } else {
-      // Pan
+    } 
+    // Horizontal scrolling with shift + wheel
+    else if (e.shiftKey) {
+      e.preventDefault();
+      setViewportPosition(prev => ({
+        x: prev.x + e.deltaY / scale,
+        y: prev.y
+      }));
+    } 
+    // Regular scrolling
+    else {
       e.preventDefault();
       setViewportPosition(prev => ({
         x: prev.x + e.deltaX / scale,
@@ -541,7 +547,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
             width: currentCanvas?.isInfinite ? '100000px' : '100%',
             height: currentCanvas?.isInfinite ? '100000px' : '100%',
             transform: `scale(${scale}) translate(${-viewportPosition.x}px, ${-viewportPosition.y}px)`,
-            transformOrigin: '0 0'
+            transformOrigin: '0 0',
+            cursor: isPanning ? 'grabbing' : 'default'
           }}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleCanvasMouseMove}

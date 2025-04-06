@@ -92,7 +92,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const isUserAdmin = () => {
     if (!user) return false;
-    // Fix the property access by checking isAdmin property
+    // Fix the property access by checking isAdmin property directly
     return user.isAdmin === true;
   };
 

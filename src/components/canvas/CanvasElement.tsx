@@ -91,6 +91,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     if (readOnly) return;
     
     e.stopPropagation();
+    e.preventDefault(); // Prevent other handlers from executing
     setIsResizing(true);
     setResizeStartPos({ x: e.clientX, y: e.clientY });
     setOriginalDimensions({ 
