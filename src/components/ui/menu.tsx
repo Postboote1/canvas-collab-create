@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils"
 
 const Menu = MenuPrimitive.Root
 
-// Fix: Use direct assignment instead of accessing property
-const MenuTrigger = MenuPrimitive.Trigger
+// Import Trigger directly
+const MenuTrigger = MenuPrimitive.Trigger as React.ComponentType<MenuPrimitive.MenuTriggerProps>
 
 const MenuGroup = MenuPrimitive.Group
 
