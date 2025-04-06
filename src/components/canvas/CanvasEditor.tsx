@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -27,6 +28,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [viewportPosition, setViewportPosition] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStartPosition, setPanStartPosition] = useState({ x: 0, y: 0 });
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -54,10 +57,20 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   }, [readOnly, currentCanvas, saveCanvas]);
   
-  // Handle canvas mouse interactions
+  // Handle mouse down on canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
     
+    // Handle right-click (contextmenu is handled separately)
+    if (e.button === 2) {
+      // Right mouse button for panning the canvas
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStartPosition({ x: e.clientX, y: e.clientY });
+      return;
+    }
+    
+    // Handle left-click
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale + viewportPosition.x;
     const y = (e.clientY - rect.top) / scale + viewportPosition.y;
@@ -98,7 +111,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newCard);
-      toast.success('Card added');
+      toast.success('Card added', {
+        position: 'bottom-center',
+      });
       
       if (isConnected) {
         sendMessage({
@@ -121,7 +136,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newText);
-      toast.success('Text added');
+      toast.success('Text added', {
+        position: 'bottom-center',
+      });
       
       if (isConnected) {
         sendMessage({
@@ -177,19 +194,27 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
             
             setArrowStart(null);
             // Toast to indicate arrow was created
-            toast.success('Arrow created');
+            toast.success('Arrow created', {
+              position: 'bottom-center',
+            });
             // Reset to select tool after adding an arrow
             setActiveTool('select');
           } else {
-            toast.error("Can't connect an element to itself");
+            toast.error("Can't connect an element to itself", {
+              position: 'bottom-center',
+            });
           }
         } else {
           // Set the start element
           setArrowStart(element.id);
-          toast.info('Now click on another element to create an arrow');
+          toast.info('Now click on another element to create an arrow', {
+            position: 'bottom-center',
+          });
         }
       } else {
-        toast.error('Please click on an element to create an arrow');
+        toast.error('Please click on an element to create an arrow', {
+          position: 'bottom-center',
+        });
       }
     } else if (activeTool === 'circle' || activeTool === 'triangle' || activeTool === 'diamond') {
       const newShape: Omit<CanvasElementType, 'id'> = {
@@ -203,7 +228,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newShape);
-      toast.success(`${activeTool} shape added`);
+      toast.success(`${activeTool} shape added`, {
+        position: 'bottom-center',
+      });
       
       if (isConnected) {
         sendMessage({
@@ -221,8 +248,27 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
   
+  // Handle mouse move on canvas
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
+    
+    // Handle panning with right mouse button
+    if (isPanning) {
+      const deltaX = e.clientX - panStartPosition.x;
+      const deltaY = e.clientY - panStartPosition.y;
+      
+      setViewportPosition(prev => ({
+        x: prev.x - deltaX / scale,
+        y: prev.y - deltaY / scale
+      }));
+      
+      setPanStartPosition({
+        x: e.clientX,
+        y: e.clientY
+      });
+      
+      return;
+    }
     
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale + viewportPosition.x;
@@ -253,8 +299,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
   
+  // Handle mouse up on canvas
   const handleCanvasMouseUp = () => {
     if (readOnly) return;
+    
+    if (isPanning) {
+      setIsPanning(false);
+      return;
+    }
     
     if (isDrawing && activeTool === 'draw' && drawingPoints.length > 1) {
       const newDrawing: Omit<CanvasElementType, 'id'> = {
@@ -266,7 +318,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newDrawing);
-      toast.success('Drawing added');
+      toast.success('Drawing added', {
+        position: 'bottom-center',
+      });
       
       if (isConnected) {
         sendMessage({
@@ -285,6 +339,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     setIsDragging(false);
   };
   
+  // Handle context menu (right-click)
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (readOnly) return;
+    
+    // Prevent the default context menu
+    e.preventDefault();
+  };
+  
+  // Handle canvas wheel for both zooming and scrolling
   const handleCanvasWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (e.ctrlKey || e.metaKey) {
       // Zoom
@@ -304,7 +367,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   // Handle element deletion
   const handleDeleteElement = (id: string) => {
     deleteElement(id);
-    toast.success('Element deleted');
+    toast.success('Element deleted', {
+      position: 'bottom-center',
+    });
     
     if (isConnected) {
       sendMessage({
@@ -341,7 +406,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newImage);
-      toast.success('Image added');
+      toast.success('Image added', {
+        position: 'bottom-center',
+      });
       
       if (isConnected) {
         sendMessage({
@@ -480,6 +547,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
+          onContextMenu={handleContextMenu}
           onTouchStart={(e) => {
             const touch = e.touches[0];
             if (touch) {

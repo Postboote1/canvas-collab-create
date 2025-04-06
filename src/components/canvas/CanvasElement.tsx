@@ -90,6 +90,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   const handleResizeStart = (e: React.MouseEvent) => {
     if (readOnly) return;
     
+    e.stopPropagation();
     setIsResizing(true);
     setResizeStartPos({ x: e.clientX, y: e.clientY });
     setOriginalDimensions({ 
@@ -100,9 +101,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     // Add event listeners for resize
     document.addEventListener('mousemove', handleResizeMove);
     document.addEventListener('mouseup', handleResizeEnd);
-    
-    // Prevent event propagation
-    e.stopPropagation();
   };
   
   const handleResizeMove = (e: MouseEvent) => {
@@ -199,7 +197,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
           </PopoverContent>
         </Popover>
         
-        {(element.type === 'card' || element.type === 'image') && (
+        {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
           <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0" onClick={handleResizeStart}>
             <Maximize size={14} />
             <span className="sr-only">Resize</span>
@@ -303,12 +301,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
           {children}
         </ContextMenuTrigger>
         <ContextMenuContent className="w-48">
-          {(element.type === 'card' || element.type === 'text' || element.type === 'image') && (
+          {(element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') && (
             <>
               <ContextMenuItem onClick={() => setShowColorPicker(true)}>
                 Change Color
               </ContextMenuItem>
-              {(element.type === 'card' || element.type === 'image') && (
+              {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
                 <ContextMenuItem onClick={handleResizeStart}>
                   Resize
                 </ContextMenuItem>

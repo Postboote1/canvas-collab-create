@@ -84,25 +84,31 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch (error) {
       console.error('Failed to load user canvases:', error);
-      toast.error('Failed to load your canvases');
+      toast.error('Failed to load your canvases', {
+        position: 'bottom-center',
+      });
     }
   };
 
   const isUserAdmin = () => {
     if (!user) return false;
-    // Fix the property access by checking isAdmin instead of role
+    // Fix the property access by checking isAdmin property
     return user.isAdmin === true;
   };
 
   const createCanvas = async (name: string, isInfinite: boolean): Promise<Canvas> => {
     if (!user) {
-      toast.error('You must be logged in to create a canvas');
+      toast.error('You must be logged in to create a canvas', {
+        position: 'bottom-center',
+      });
       throw new Error('Not logged in');
     }
     
     // Check if user has reached the limit of 5 canvases (unless they're an admin)
     if (!isUserAdmin() && userCanvases.length >= 5) {
-      toast.error('You can only create up to 5 canvases. Upgrade to Admin for unlimited canvases.');
+      toast.error('You can only create up to 5 canvases. Upgrade to Admin for unlimited canvases.', {
+        position: 'bottom-center',
+      });
       throw new Error('Canvas limit reached');
     }
     
@@ -136,14 +142,18 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Track canvas creation for analytics
         trackCanvasCreation();
         
-        toast.success('Canvas created successfully!');
+        toast.success('Canvas created successfully!', {
+          position: 'bottom-center',
+        });
         return newCanvas;
       } else {
         throw new Error('User not found');
       }
     } catch (error) {
       console.error('Failed to create canvas:', error);
-      toast.error('Failed to create canvas');
+      toast.error('Failed to create canvas', {
+        position: 'bottom-center',
+      });
       throw error;
     }
   };
@@ -166,8 +176,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Track canvas creation for analytics
     trackCanvasCreation();
     
-    toast.success('Temporary canvas created!');
-    toast.info('Sign in to save this canvas to your account.');
+    toast.success('Temporary canvas created!', {
+      position: 'bottom-center',
+    });
+    toast.info('Sign in to save this canvas to your account.', {
+      position: 'bottom-center',
+    });
     
     return newCanvas;
   };
@@ -175,18 +189,24 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Add a method to save the current temporary canvas to a user account
   const saveCurrentCanvasToAccount = async (): Promise<boolean> => {
     if (!user) {
-      toast.error('You must be logged in to save a canvas');
+      toast.error('You must be logged in to save a canvas', {
+        position: 'bottom-center',
+      });
       return false;
     }
     
     if (!currentCanvas) {
-      toast.error('No canvas to save');
+      toast.error('No canvas to save', {
+        position: 'bottom-center',
+      });
       return false;
     }
     
     // Check if user has reached the limit of 5 canvases (unless they're an admin)
     if (!isUserAdmin() && userCanvases.length >= 5) {
-      toast.error('You can only have up to 5 canvases. Please delete one first or upgrade to Admin.');
+      toast.error('You can only have up to 5 canvases. Please delete one first or upgrade to Admin.', {
+        position: 'bottom-center',
+      });
       return false;
     }
     
@@ -216,15 +236,21 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setUserCanvases([...userCanvases, savedCanvas]);
         setCurrentCanvas(savedCanvas);
         
-        toast.success('Canvas saved to your account!');
+        toast.success('Canvas saved to your account!', {
+          position: 'bottom-center',
+        });
         return true;
       } else {
-        toast.error('User not found');
+        toast.error('User not found', {
+          position: 'bottom-center',
+        });
         return false;
       }
     } catch (error) {
       console.error('Failed to save canvas to account:', error);
-      toast.error('Failed to save canvas to account');
+      toast.error('Failed to save canvas to account', {
+        position: 'bottom-center',
+      });
       return false;
     }
   };
@@ -239,7 +265,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return false;
     } catch (error) {
       console.error('Failed to load canvas:', error);
-      toast.error('Failed to load canvas');
+      toast.error('Failed to load canvas', {
+        position: 'bottom-center',
+      });
       return false;
     }
   };
@@ -268,28 +296,38 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Track canvas join for analytics
         trackCanvasJoin();
         
-        toast.success('Canvas loaded successfully!');
+        toast.success('Canvas loaded successfully!', {
+          position: 'bottom-center',
+        });
         return true;
       } else {
-        toast.error('Canvas not found with that code');
+        toast.error('Canvas not found with that code', {
+          position: 'bottom-center',
+        });
         return false;
       }
     } catch (error) {
       console.error('Failed to load canvas by code:', error);
-      toast.error('Failed to load canvas');
+      toast.error('Failed to load canvas', {
+        position: 'bottom-center',
+      });
       return false;
     }
   };
 
   const saveCanvas = async (): Promise<boolean> => {
     if (!currentCanvas) {
-      toast.error('No canvas to save');
+      toast.error('No canvas to save', {
+        position: 'bottom-center',
+      });
       return false;
     }
     
     // If anonymous user, just return true without saving
     if (!user || currentCanvas.createdBy === 'anonymous') {
-      toast.info('Sign in to save this canvas to your account');
+      toast.info('Sign in to save this canvas to your account', {
+        position: 'bottom-center',
+      });
       return true;
     }
     
@@ -311,16 +349,22 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // Update state
           setUserCanvases(users[userIndex].canvases);
           
-          toast.success('Canvas saved successfully!');
+          toast.success('Canvas saved successfully!', {
+            position: 'bottom-center',
+          });
           return true;
         }
       }
       
-      toast.error('Failed to save canvas: Canvas not found');
+      toast.error('Failed to save canvas: Canvas not found', {
+        position: 'bottom-center',
+      });
       return false;
     } catch (error) {
       console.error('Failed to save canvas:', error);
-      toast.error('Failed to save canvas');
+      toast.error('Failed to save canvas', {
+        position: 'bottom-center',
+      });
       return false;
     }
   };
@@ -367,34 +411,46 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       elements: []
     });
     
-    toast.success('Canvas cleared');
+    toast.success('Canvas cleared', {
+      position: 'bottom-center',
+    });
   };
 
   const exportAsImage = () => {
     if (!currentCanvas) {
-      toast.error('No canvas to export');
+      toast.error('No canvas to export', {
+        position: 'bottom-center',
+      });
       return;
     }
     
     // This is a placeholder - in a real app, you would use an HTML canvas or a library
     // like html-to-image to actually export the canvas as an image
-    toast.success('Canvas exported as image (mock)');
+    toast.success('Canvas exported as image (mock)', {
+      position: 'bottom-center',
+    });
   };
 
   const exportAsPDF = () => {
     if (!currentCanvas) {
-      toast.error('No canvas to export');
+      toast.error('No canvas to export', {
+        position: 'bottom-center',
+      });
       return;
     }
     
     // This is a placeholder - in a real app, you would use a library like jsPDF
     // to actually export the canvas as a PDF
-    toast.success('Canvas exported as PDF (mock)');
+    toast.success('Canvas exported as PDF (mock)', {
+      position: 'bottom-center',
+    });
   };
 
   const exportCanvasData = (): string => {
     if (!currentCanvas) {
-      toast.error('No canvas to export');
+      toast.error('No canvas to export', {
+        position: 'bottom-center',
+      });
       return '';
     }
     
@@ -402,7 +458,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return JSON.stringify(currentCanvas);
     } catch (error) {
       console.error('Failed to export canvas data:', error);
-      toast.error('Failed to export canvas data');
+      toast.error('Failed to export canvas data', {
+        position: 'bottom-center',
+      });
       return '';
     }
   };
@@ -413,7 +471,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       
       // Validate the canvas data
       if (!canvas.id || !canvas.name || !Array.isArray(canvas.elements)) {
-        toast.error('Invalid canvas data');
+        toast.error('Invalid canvas data', {
+          position: 'bottom-center',
+        });
         return false;
       }
       
@@ -430,7 +490,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         
         // If user has reached the limit, show an error
         if (userCanvases.length >= 5) {
-          toast.error('You can only have up to 5 canvases. Please delete one first.');
+          toast.error('You can only have up to 5 canvases. Please delete one first.', {
+            position: 'bottom-center',
+          });
           return false;
         }
         
@@ -450,20 +512,26 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setUserCanvases([...userCanvases, importedCanvas]);
           setCurrentCanvas(importedCanvas);
           
-          toast.success('Canvas imported and saved to your account!');
+          toast.success('Canvas imported and saved to your account!', {
+            position: 'bottom-center',
+          });
           return true;
         }
       } else {
         // If user is not logged in, just load the canvas temporarily
         setCurrentCanvas(canvas);
-        toast.success('Canvas imported (not saved to account)');
+        toast.success('Canvas imported (not saved to account)', {
+          position: 'bottom-center',
+        });
         return true;
       }
       
       return false;
     } catch (error) {
       console.error('Failed to import canvas data:', error);
-      toast.error('Failed to import canvas data');
+      toast.error('Failed to import canvas data', {
+        position: 'bottom-center',
+      });
       return false;
     }
   };
