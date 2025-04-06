@@ -7,7 +7,7 @@ import { TooltipProvider } from './components/ui/tooltip';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <App />
     </TooltipProvider>
   </React.StrictMode>,

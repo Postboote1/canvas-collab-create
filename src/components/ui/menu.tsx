@@ -7,8 +7,18 @@ import { cn } from "@/lib/utils"
 
 const Menu = MenuPrimitive.Root
 
-// Import Trigger directly
-const MenuTrigger = MenuPrimitive.Trigger as React.ComponentType<MenuPrimitive.MenuTriggerProps>
+// Fix the MenuTrigger import
+const MenuTrigger = React.forwardRef<
+  React.ElementRef<typeof MenuPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>
+>(({ className, ...props }, ref) => (
+  <MenuPrimitive.Trigger
+    ref={ref}
+    className={cn(className)}
+    {...props}
+  />
+))
+MenuTrigger.displayName = MenuPrimitive.Trigger.displayName
 
 const MenuGroup = MenuPrimitive.Group
 

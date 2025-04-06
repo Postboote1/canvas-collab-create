@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +31,12 @@ import {
 } from "@/components/ui/popover";
 import { useTheme } from '@/contexts/ThemeContext';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { 
+  Tooltip, 
+  TooltipContent, 
+  TooltipProvider, 
+  TooltipTrigger 
+} from '@/components/ui/tooltip';
 
 interface CanvasToolbarProps {
   activeTool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond';
@@ -162,21 +166,19 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           
           {!readOnly && (
             <Popover open={isColorPickerOpen} onOpenChange={setIsColorPickerOpen}>
-              <TooltipTrigger asChild>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="relative h-8"
-                  >
-                    <Palette size={18} />
-                    <div 
-                      className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-gray-300" 
-                      style={{ backgroundColor: activeColor }}
-                    />
-                  </Button>
-                </PopoverTrigger>
-              </TooltipTrigger>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="relative h-8"
+                >
+                  <Palette size={18} />
+                  <div 
+                    className="absolute bottom-1 right-1 w-2 h-2 rounded-full border border-gray-300" 
+                    style={{ backgroundColor: activeColor }}
+                  />
+                </Button>
+              </PopoverTrigger>
               <PopoverContent className="w-auto p-3">
                 <div className="flex flex-col gap-2">
                   <p className="text-sm font-medium">Color</p>
@@ -263,22 +265,21 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                    className="h-8"
-                  >
-                    <label>
+                  <label className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 cursor-pointer"
+                    >
                       <Image size={18} />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={onImageUpload}
-                      />
-                    </label>
-                  </Button>
+                    </Button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={onImageUpload}
+                    />
+                  </label>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Upload Image</TooltipContent>
               </Tooltip>
