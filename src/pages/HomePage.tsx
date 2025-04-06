@@ -1,11 +1,12 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 
 const HomePage: React.FC = () => {
   const { isLoggedIn } = useAuth();
+  const navigate = useNavigate();
   
   return (
     <Layout>
@@ -20,16 +21,21 @@ const HomePage: React.FC = () => {
               Create, share, and present ideas with a powerful collaborative canvas tool for teams.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/create-temp">
-                <Button size="lg" className="w-full sm:w-auto">
-                  Create Canvas
-                </Button>
-              </Link>
-              <Link to="/join">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                  Join Existing Canvas
-                </Button>
-              </Link>
+              <Button 
+                size="lg" 
+                className="w-full sm:w-auto"
+                onClick={() => navigate('/create-temp')}
+              >
+                Create Canvas
+              </Button>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                className="w-full sm:w-auto"
+                onClick={() => navigate('/join')}
+              >
+                Join Existing Canvas
+              </Button>
             </div>
             {!isLoggedIn() && (
               <p className="mt-4 text-sm text-gray-500">
@@ -145,11 +151,14 @@ const HomePage: React.FC = () => {
               <p className="text-xl mb-8 max-w-2xl mx-auto">
                 Join today and create your first collaborative canvas in minutes.
               </p>
-              <Link to="/create-temp">
-                <Button size="lg" variant="outline" className="bg-white text-canvas-blue hover:bg-gray-100 border-white">
-                  Create Canvas
-                </Button>
-              </Link>
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className="bg-white text-canvas-blue hover:bg-gray-100 border-white"
+                onClick={() => navigate('/create-temp')}
+              >
+                Create Canvas
+              </Button>
             </div>
           </div>
         </div>

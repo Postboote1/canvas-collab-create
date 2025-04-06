@@ -1,13 +1,14 @@
 
 import React, { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import NavBar from './NavBar';
 import Footer from './Footer';
 import CookieConsent from '../common/CookieConsent';
 import { useAnalytics } from '@/contexts/AnalyticsContext';
-import { useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 
 interface LayoutProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
@@ -23,7 +24,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="flex flex-col min-h-screen">
       <NavBar />
       <main className="flex-grow">
-        {children}
+        {children || <Outlet />}
       </main>
       <Footer />
       <CookieConsent />

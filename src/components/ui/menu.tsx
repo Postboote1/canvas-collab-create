@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 
 const Menu = MenuPrimitive.Root
 
+// Fix: Use direct assignment instead of accessing property
 const MenuTrigger = MenuPrimitive.Trigger
 
 const MenuGroup = MenuPrimitive.Group
