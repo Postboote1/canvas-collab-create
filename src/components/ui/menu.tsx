@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils"
 
 const Menu = MenuPrimitive.Root
 
-// Fix the MenuTrigger implementation by using the correct component name
+// Fix the MenuTrigger implementation using the correct Radix UI component
 const MenuTrigger = React.forwardRef<
-  React.ElementRef<typeof MenuPrimitive.Root["trigger"]>,
-  React.ComponentPropsWithoutRef<typeof MenuPrimitive.Root["trigger"]>
+  React.ElementRef<typeof MenuPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>
 >(({ className, ...props }, ref) => (
   <MenuPrimitive.Trigger
     ref={ref}
@@ -18,7 +18,7 @@ const MenuTrigger = React.forwardRef<
     {...props}
   />
 ))
-MenuTrigger.displayName = "MenuTrigger"
+MenuTrigger.displayName = MenuPrimitive.Trigger.displayName
 
 const MenuGroup = MenuPrimitive.Group
 
