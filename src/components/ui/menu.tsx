@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 const Menu = MenuPrimitive.Root
 
-// Fix the MenuTrigger implementation by directly using the component
+// Fix the MenuTrigger implementation by using the correct component name
 const MenuTrigger = React.forwardRef<
   React.ElementRef<typeof MenuPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>
@@ -17,7 +17,7 @@ const MenuTrigger = React.forwardRef<
     {...props}
   />
 ))
-MenuTrigger.displayName = MenuPrimitive.Trigger.displayName || "MenuTrigger"
+MenuTrigger.displayName = "MenuTrigger"
 
 const MenuGroup = MenuPrimitive.Group
 
