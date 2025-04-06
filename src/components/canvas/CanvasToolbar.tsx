@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   MousePointer,
@@ -285,7 +284,9 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                         const input = document.createElement('input');
                         input.type = 'file';
                         input.accept = 'image/*';
-                        input.onchange = onImageUpload;
+                        input.onchange = (ev: Event) => {
+                          onImageUpload(ev as unknown as ChangeEvent<HTMLInputElement>);
+                        };
                         input.click();
                       }}
                     >

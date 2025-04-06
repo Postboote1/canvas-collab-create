@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
@@ -91,7 +90,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const isUserAdmin = () => {
     if (!user) return false;
-    return user.role === 'admin';
+    // Fix the property access by checking isAdmin instead of role
+    return user.isAdmin === true;
   };
 
   const createCanvas = async (name: string, isInfinite: boolean): Promise<Canvas> => {
