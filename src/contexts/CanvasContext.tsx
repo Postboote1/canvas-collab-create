@@ -89,15 +89,20 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const isUserAdmin = () => {
+    if (!user) return false;
+    return user.role === 'admin';
+  };
+
   const createCanvas = async (name: string, isInfinite: boolean): Promise<Canvas> => {
     if (!user) {
       toast.error('You must be logged in to create a canvas');
       throw new Error('Not logged in');
     }
     
-    // Check if user has reached the limit of 5 canvases
-    if (userCanvases.length >= 5) {
-      toast.error('You can only create up to 5 canvases');
+    // Check if user has reached the limit of 5 canvases (unless they're an admin)
+    if (!isUserAdmin() && userCanvases.length >= 5) {
+      toast.error('You can only create up to 5 canvases. Upgrade to Admin for unlimited canvases.');
       throw new Error('Canvas limit reached');
     }
     
@@ -179,9 +184,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return false;
     }
     
-    // Check if user has reached the limit of 5 canvases
-    if (userCanvases.length >= 5) {
-      toast.error('You can only have up to 5 canvases. Please delete one first.');
+    // Check if user has reached the limit of 5 canvases (unless they're an admin)
+    if (!isUserAdmin() && userCanvases.length >= 5) {
+      toast.error('You can only have up to 5 canvases. Please delete one first or upgrade to Admin.');
       return false;
     }
     

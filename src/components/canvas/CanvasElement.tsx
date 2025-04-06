@@ -1,7 +1,11 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { CanvasElement as ICanvasElement } from '@/contexts/CanvasContext';
-import { Menu } from '@/components/ui/menu';
+import { 
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem
+} from '@/components/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Palette, Maximize, Trash } from 'lucide-react';
@@ -42,7 +46,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         onUpdateElement({ height: contentHeight + 24 }); // Add some padding
       }
     }
-  }, [element.content, element.type, isEditing, isResizing]);
+  }, [element.content, element.type, isEditing, isResizing, onUpdateElement]);
 
   // Auto-resize textarea when editing
   useEffect(() => {
@@ -137,14 +141,22 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     
     return (
       <div 
-        className="absolute bottom-0 right-0 w-4 h-4 bg-blue-500 cursor-se-resize z-10 rounded-bl"
+        className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 cursor-se-resize z-10 rounded-bl flex items-center justify-center"
         onMouseDown={handleResizeStart}
-        onContextMenu={(e) => {
-          e.preventDefault();
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          if (touch) {
+            const mouseEvent = new MouseEvent('mousedown', {
+              clientX: touch.clientX,
+              clientY: touch.clientY
+            });
+            handleResizeStart(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+          }
           e.stopPropagation();
-          handleResizeStart(e);
         }}
-      />
+      >
+        <Maximize size={14} className="text-white" />
+      </div>
     );
   };
 
@@ -280,10 +292,41 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     };
   };
   
+  const renderContextMenu = (children: React.ReactNode) => {
+    if (readOnly) {
+      return children;
+    }
+    
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          {children}
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          {(element.type === 'card' || element.type === 'text' || element.type === 'image') && (
+            <>
+              <ContextMenuItem onClick={() => setShowColorPicker(true)}>
+                Change Color
+              </ContextMenuItem>
+              {(element.type === 'card' || element.type === 'image') && (
+                <ContextMenuItem onClick={handleResizeStart}>
+                  Resize
+                </ContextMenuItem>
+              )}
+            </>
+          )}
+          <ContextMenuItem onClick={handleDelete} className="text-destructive">
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  };
+  
   const renderElement = () => {
     switch (element.type) {
       case 'card':
-        return (
+        return renderContextMenu(
           <div
             ref={elementRef}
             className={`absolute card-canvas rounded-md p-3 ${selected ? 'ring-2 ring-blue-500' : ''}`}
@@ -298,7 +341,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               overflowY: 'auto'
             }}
             onDoubleClick={handleDoubleClick}
-            onContextMenu={handleContextMenu}
           >
             {isEditing ? (
               <textarea
@@ -321,7 +363,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         );
         
       case 'text':
-        return (
+        return renderContextMenu(
           <div
             className={`absolute ${selected ? 'ring-2 ring-blue-500' : ''}`}
             style={{
@@ -330,7 +372,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               cursor: readOnly ? 'default' : 'move'
             }}
             onDoubleClick={handleDoubleClick}
-            onContextMenu={handleContextMenu}
           >
             {isEditing ? (
               <textarea
@@ -378,7 +419,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         );
         
       case 'image':
-        return (
+        return renderContextMenu(
           <div
             ref={elementRef}
             className={`absolute ${selected ? 'ring-2 ring-blue-500' : ''}`}
@@ -389,7 +430,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               height: element.height,
               cursor: readOnly ? 'default' : 'move'
             }}
-            onContextMenu={handleContextMenu}
           >
             <img
               src={element.imageUrl}
@@ -458,7 +498,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         );
         
       case 'shape':
-        return (
+        return renderContextMenu(
           <div
             ref={elementRef}
             className={`absolute ${selected ? 'ring-2 ring-blue-500' : ''}`}
@@ -469,7 +509,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               height: element.height,
               cursor: readOnly ? 'default' : 'move'
             }}
-            onContextMenu={handleContextMenu}
           >
             <svg width="100%" height="100%" viewBox={`0 0 ${element.width} ${element.height}`}>
               {element.shapeType === 'circle' && (

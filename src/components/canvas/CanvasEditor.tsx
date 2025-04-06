@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -31,6 +30,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Connect to WebSocket when canvas changes
   useEffect(() => {
@@ -41,7 +41,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         disconnect();
       };
     }
-  }, [currentCanvas, user]);
+  }, [currentCanvas, user, connect, disconnect]);
   
   // Auto-save every 30 seconds
   useEffect(() => {
@@ -98,6 +98,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newCard);
+      toast.success('Card added');
       
       if (isConnected) {
         sendMessage({
@@ -120,6 +121,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newText);
+      toast.success('Text added');
       
       if (isConnected) {
         sendMessage({
@@ -201,6 +203,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newShape);
+      toast.success(`${activeTool} shape added`);
       
       if (isConnected) {
         sendMessage({
@@ -212,6 +215,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       
       // Reset to select tool after adding a shape
       setActiveTool('select');
+    } else if (activeTool === 'image' && fileInputRef.current) {
+      // Trigger file input click when image tool is active
+      fileInputRef.current.click();
     }
   };
   
@@ -260,6 +266,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newDrawing);
+      toast.success('Drawing added');
       
       if (isConnected) {
         sendMessage({
@@ -279,13 +286,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   };
   
   const handleCanvasWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (e.ctrlKey) {
+    if (e.ctrlKey || e.metaKey) {
       // Zoom
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       setScale(prevScale => Math.max(0.1, Math.min(prevScale * delta, 5)));
     } else {
       // Pan
+      e.preventDefault();
       setViewportPosition(prev => ({
         x: prev.x + e.deltaX / scale,
         y: prev.y + e.deltaY / scale
@@ -296,6 +304,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   // Handle element deletion
   const handleDeleteElement = (id: string) => {
     deleteElement(id);
+    toast.success('Element deleted');
     
     if (isConnected) {
       sendMessage({
@@ -332,6 +341,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       };
       
       addElement(newImage);
+      toast.success('Image added');
       
       if (isConnected) {
         sendMessage({
@@ -349,7 +359,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     e.target.value = '';
   };
 
-  // Implement actual export functionality
   const handleExportAsImage = () => {
     if (!contentRef.current) {
       toast.error('Canvas not ready');
@@ -422,7 +431,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }, 100);
   };
 
-  // Attach export methods to window for global access
   useEffect(() => {
     if (!currentCanvas) return;
     
@@ -461,8 +469,10 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       >
         <div 
           ref={canvasRef}
-          className={`absolute ${currentCanvas?.isInfinite ? 'infinite-canvas' : 'w-full h-full'} canvas-background dark:bg-zinc-900`}
+          className="absolute w-full h-full canvas-background dark:bg-zinc-900"
           style={{
+            width: currentCanvas?.isInfinite ? '100000px' : '100%',
+            height: currentCanvas?.isInfinite ? '100000px' : '100%',
             transform: `scale(${scale}) translate(${-viewportPosition.x}px, ${-viewportPosition.y}px)`,
             transformOrigin: '0 0'
           }}
@@ -546,6 +556,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           )}
         </div>
       </div>
+      
+      {/* Hidden file input for image uploads */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
       
       {isConnected && (
         <div className="fixed bottom-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm animate-pulse-light z-50">

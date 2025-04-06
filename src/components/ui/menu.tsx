@@ -18,7 +18,7 @@ const MenuTrigger = React.forwardRef<
     {...props}
   />
 ))
-MenuTrigger.displayName = MenuPrimitive.Trigger.displayName
+MenuTrigger.displayName = "MenuTrigger"
 
 const MenuGroup = MenuPrimitive.Group
 

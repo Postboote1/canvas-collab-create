@@ -9,6 +9,7 @@ import { useCanvas } from '@/contexts/CanvasContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Helmet } from 'react-helmet';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { toast } from 'sonner';
 
 const CanvasPage: React.FC = () => {
   const { currentCanvas, saveCurrentCanvasToAccount } = useCanvas();
@@ -32,6 +33,7 @@ const CanvasPage: React.FC = () => {
   
   const handleSaveToAccount = async () => {
     if (!isLoggedIn()) {
+      toast.info('Please log in to save this canvas');
       navigate('/login');
       return;
     }
@@ -69,7 +71,7 @@ const CanvasPage: React.FC = () => {
               <Button
                 variant="default"
                 size="sm"
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleSaveToAccount}
                 disabled={isSaving}
               >
@@ -81,7 +83,7 @@ const CanvasPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-1"
+              className="flex items-center gap-1 bg-blue-500 text-white hover:bg-blue-600"
               onClick={() => navigate('/presentation')}
             >
               <Play size={16} />
@@ -93,6 +95,7 @@ const CanvasPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
+              className="bg-gray-700 text-white hover:bg-gray-800"
               onClick={() => navigate('/')}
             >
               Exit
