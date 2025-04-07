@@ -387,8 +387,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         });
       }
 
-      // Reset to select tool after drawing
-      setActiveTool('select');
+      // REMOVED: setActiveTool('select'); // Don't reset tool after drawing
     }
 
     setIsDrawing(false);
