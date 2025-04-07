@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
@@ -53,11 +54,14 @@ interface CanvasContextType {
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
 
+// Define a global storage key for canvases to ensure they're accessible across sessions/devices
+const CANVAS_STORAGE_KEY = 'global_canvases';
+
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [userCanvases, setUserCanvases] = useState<Canvas[]>([]);
   const [currentCanvas, setCurrentCanvas] = useState<Canvas | null>(null);
-
+  
   // Load user canvases when user changes
   useEffect(() => {
     if (user) {
@@ -67,6 +71,26 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Don't clear currentCanvas when logout to allow anonymous usage
     }
   }, [user]);
+
+  // New function to get all canvases from global storage
+  const getAllCanvases = (): Canvas[] => {
+    try {
+      const canvasesStr = localStorage.getItem(CANVAS_STORAGE_KEY) || '[]';
+      return JSON.parse(canvasesStr);
+    } catch (error) {
+      console.error('Failed to load canvases from storage:', error);
+      return [];
+    }
+  };
+
+  // New function to save all canvases to global storage
+  const saveAllCanvases = (canvases: Canvas[]) => {
+    try {
+      localStorage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(canvases));
+    } catch (error) {
+      console.error('Failed to save canvases to storage:', error);
+    }
+  };
 
   const loadUserCanvases = () => {
     if (!user) return;
@@ -135,6 +159,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         users[userIndex].canvases.push(newCanvas);
         localStorage.setItem('canvasUsers', JSON.stringify(users));
         
+        // Also add to global canvases for sharing
+        const allCanvases = getAllCanvases();
+        allCanvases.push(newCanvas);
+        saveAllCanvases(allCanvases);
+        
         // Update state
         setUserCanvases([...userCanvases, newCanvas]);
         setCurrentCanvas(newCanvas);
@@ -169,6 +198,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       joinCode: generateJoinCode(),
       isInfinite
     };
+    
+    // Add to global canvases for sharing
+    const allCanvases = getAllCanvases();
+    allCanvases.push(newCanvas);
+    saveAllCanvases(allCanvases);
     
     // Set as current canvas but don't save to any user account
     setCurrentCanvas(newCanvas);
@@ -232,6 +266,16 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         users[userIndex].canvases.push(savedCanvas);
         localStorage.setItem('canvasUsers', JSON.stringify(users));
         
+        // Update global canvases - replace the temp canvas with the saved one
+        const allCanvases = getAllCanvases();
+        const tempCanvasIndex = allCanvases.findIndex(c => c.id === currentCanvas.id);
+        if (tempCanvasIndex !== -1) {
+          allCanvases[tempCanvasIndex] = savedCanvas;
+        } else {
+          allCanvases.push(savedCanvas);
+        }
+        saveAllCanvases(allCanvases);
+        
         // Update state
         setUserCanvases([...userCanvases, savedCanvas]);
         setCurrentCanvas(savedCanvas);
@@ -274,21 +318,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const loadCanvasByCode = async (code: string): Promise<boolean> => {
     try {
-      // Get all users and search through all canvases for the join code
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
+      // Get all canvases and search for the join code
+      const allCanvases = getAllCanvases();
       
-      let foundCanvas = null;
-      
-      for (const u of users) {
-        if (u.canvases) {
-          const canvas = u.canvases.find((c: Canvas) => c.joinCode === code);
-          if (canvas) {
-            foundCanvas = canvas;
-            break;
-          }
-        }
-      }
+      const foundCanvas = allCanvases.find(canvas => canvas.joinCode === code);
       
       if (foundCanvas) {
         setCurrentCanvas(foundCanvas);
@@ -301,6 +334,31 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
         return true;
       } else {
+        // Fallback to old method as migration path
+        const usersStr = localStorage.getItem('canvasUsers') || '[]';
+        const users = JSON.parse(usersStr);
+        
+        for (const u of users) {
+          if (u.canvases) {
+            const canvas = u.canvases.find((c: Canvas) => c.joinCode === code);
+            if (canvas) {
+              setCurrentCanvas(canvas);
+              
+              // Also add to global canvases for future access
+              allCanvases.push(canvas);
+              saveAllCanvases(allCanvases);
+              
+              // Track canvas join for analytics
+              trackCanvasJoin();
+              
+              toast.success('Canvas loaded successfully!', {
+                position: 'bottom-center',
+              });
+              return true;
+            }
+          }
+        }
+        
         toast.error('Canvas not found with that code', {
           position: 'bottom-center',
         });
@@ -345,6 +403,16 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (canvasIndex !== -1) {
           users[userIndex].canvases[canvasIndex] = currentCanvas;
           localStorage.setItem('canvasUsers', JSON.stringify(users));
+          
+          // Also update in global canvases
+          const allCanvases = getAllCanvases();
+          const globalCanvasIndex = allCanvases.findIndex(c => c.id === currentCanvas.id);
+          if (globalCanvasIndex !== -1) {
+            allCanvases[globalCanvasIndex] = currentCanvas;
+          } else {
+            allCanvases.push(currentCanvas);
+          }
+          saveAllCanvases(allCanvases);
           
           // Update state
           setUserCanvases(users[userIndex].canvases);
@@ -508,6 +576,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           users[userIndex].canvases.push(importedCanvas);
           localStorage.setItem('canvasUsers', JSON.stringify(users));
           
+          // Also add to global canvases
+          const allCanvases = getAllCanvases();
+          allCanvases.push(importedCanvas);
+          saveAllCanvases(allCanvases);
+          
           // Update state
           setUserCanvases([...userCanvases, importedCanvas]);
           setCurrentCanvas(importedCanvas);
@@ -519,6 +592,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       } else {
         // If user is not logged in, just load the canvas temporarily
+        // Also add to global canvases with original join code
+        const allCanvases = getAllCanvases();
+        allCanvases.push(canvas);
+        saveAllCanvases(allCanvases);
+        
         setCurrentCanvas(canvas);
         toast.success('Canvas imported (not saved to account)', {
           position: 'bottom-center',
