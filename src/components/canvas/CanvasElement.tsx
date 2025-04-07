@@ -48,7 +48,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         onUpdateElement({ height: contentHeight + 24 }); // Add some padding
       }
     }
-  }, [element.content, element.type, isEditing, isResizing, onUpdateElement, element.height]); // Added element.height dependency
+  }, [element.content, element.type, isEditing, isResizing, onUpdateElement, element.height]);
 
   // Auto-resize textarea when editing
   useEffect(() => {
@@ -82,7 +82,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         window.removeEventListener('mouseup', handleResizeEndGlobal);
       };
     }
-  }, [isResizing]); // Only re-run this effect if isResizing changes
+  }, [isResizing]);
 
   const handleDoubleClick = () => {
     if (!readOnly && (element.type === 'card' || element.type === 'text')) {
@@ -118,8 +118,8 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   const handleResizeStart = (e: React.MouseEvent) => {
     if (readOnly) return;
 
-    e.stopPropagation();
-    e.preventDefault(); // Prevent other handlers from executing
+    e.stopPropagation(); // Stop propagation for resize handle specifically
+    e.preventDefault();
     setIsResizing(true);
     setResizeStartPos({ x: e.clientX, y: e.clientY });
     setOriginalDimensions({
@@ -129,7 +129,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const handleResizeMove = (e: MouseEvent) => {
-    // This function is now called by the global event listener
     const deltaX = e.clientX - resizeStartPos.x;
     const deltaY = e.clientY - resizeStartPos.y;
 
@@ -143,7 +142,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const handleResizeEnd = () => {
-    // This function is now called by the global event listener
     setIsResizing(false);
   };
 
@@ -161,7 +159,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     return (
       <div
         className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 cursor-se-resize z-10 rounded-bl flex items-center justify-center"
-        onMouseDown={handleResizeStart}
+        onMouseDown={handleResizeStart} // Keep stopPropagation here
         onTouchStart={(e) => {
           const touch = e.touches[0];
           if (touch) {
@@ -171,7 +169,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             });
             handleResizeStart(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
           }
-          e.stopPropagation();
+          e.stopPropagation(); // Keep stopPropagation here
         }}
       >
         <Maximize size={14} className="text-white" />
@@ -264,41 +262,17 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
 
     // Find the shortest path for the arrow between the two elements
     const possiblePaths = [
-      // From right edge to left edge
-      {
-        from: { x: fromRect.right, y: fromRect.centerY },
-        to: { x: toRect.left, y: toRect.centerY }
-      },
-      // From left edge to right edge
-      {
-        from: { x: fromRect.left, y: fromRect.centerY },
-        to: { x: toRect.right, y: toRect.centerY }
-      },
-      // From bottom edge to top edge
-      {
-        from: { x: fromRect.centerX, y: fromRect.bottom },
-        to: { x: toRect.centerX, y: toRect.top }
-      },
-      // From top edge to bottom edge
-      {
-        from: { x: fromRect.centerX, y: fromRect.top },
-        to: { x: toRect.centerX, y: toRect.bottom }
-      }
+      { from: { x: fromRect.right, y: fromRect.centerY }, to: { x: toRect.left, y: toRect.centerY } },
+      { from: { x: fromRect.left, y: fromRect.centerY }, to: { x: toRect.right, y: toRect.centerY } },
+      { from: { x: fromRect.centerX, y: fromRect.bottom }, to: { x: toRect.centerX, y: toRect.top } },
+      { from: { x: fromRect.centerX, y: fromRect.top }, to: { x: toRect.centerX, y: toRect.bottom } }
     ];
 
-    // Find the shortest path
     let shortestPath = possiblePaths[0];
-    let shortestDistance = Math.hypot(
-      shortestPath.to.x - shortestPath.from.x,
-      shortestPath.to.y - shortestPath.from.y
-    );
+    let shortestDistance = Math.hypot(shortestPath.to.x - shortestPath.from.x, shortestPath.to.y - shortestPath.from.y);
 
     for (let i = 1; i < possiblePaths.length; i++) {
-      const distance = Math.hypot(
-        possiblePaths[i].to.x - possiblePaths[i].from.x,
-        possiblePaths[i].to.y - possiblePaths[i].from.y
-      );
-
+      const distance = Math.hypot(possiblePaths[i].to.x - possiblePaths[i].from.x, possiblePaths[i].to.y - possiblePaths[i].from.y);
       if (distance < shortestDistance) {
         shortestDistance = distance;
         shortestPath = possiblePaths[i];
@@ -360,11 +334,11 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               cursor: readOnly ? 'default' : 'move',
               minHeight: '75px',
               overflowY: 'auto',
-              position: 'absolute' // Ensure positioning context
+              position: 'absolute'
             }}
             onDoubleClick={handleDoubleClick}
-            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
-            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             {isEditing ? (
               <textarea
@@ -394,11 +368,11 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               left: element.x,
               top: element.y,
               cursor: readOnly ? 'default' : 'move',
-              position: 'absolute' // Ensure positioning context
+              position: 'absolute'
             }}
             onDoubleClick={handleDoubleClick}
-            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
-            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             {isEditing ? (
               <textarea
@@ -425,25 +399,19 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
 
       case 'drawing':
         if (!element.points || element.points.length < 2) return null;
-
-        // Render the drawing path using SVG polyline
         return (
           <svg
             className="absolute top-0 left-0 w-full h-full pointer-events-none"
-            style={{
-              left: 0, // Position SVG relative to canvas container
-              top: 0,
-              // Ensure SVG itself doesn't capture pointer events meant for canvas
-            }}
+            style={{ left: 0, top: 0 }}
           >
             <polyline
-              points={element.points.map(p => `${p.x},${p.y}`).join(' ')} // Use only x and y
+              points={element.points.map(p => `${p.x},${p.y}`).join(' ')}
               fill="none"
               stroke={element.color || '#000000'}
-              strokeWidth="2" // Fixed stroke width for simplicity
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke" // Keep stroke visually consistent
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
         );
@@ -459,10 +427,10 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               width: element.width,
               height: element.height,
               cursor: readOnly ? 'default' : 'move',
-              position: 'absolute' // Ensure positioning context
+              position: 'absolute'
             }}
-            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
-            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             <img
               src={element.imageUrl}
@@ -476,64 +444,38 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
 
       case 'arrow':
         const coords = getArrowCoordinates();
-
         if (!coords) return null;
         const { fromX, fromY, toX, toY } = coords;
-
-        // Calculate direction and marker offset
         const dx = toX - fromX;
         const dy = toY - fromY;
         const angle = Math.atan2(dy, dx);
-        const markerOffset = 8; // Offset for the arrowhead
-
-        // Calculate the endpoint with offset to place arrowhead correctly
+        const markerOffset = 8;
         const endX = toX - markerOffset * Math.cos(angle);
         const endY = toY - markerOffset * Math.sin(angle);
 
-        // Make arrows selectable by wrapping in a context menu
         return renderContextMenu(
           <svg
-            className={`absolute top-0 left-0 w-full h-full pointer-events-none ${selected ? 'cursor-pointer' : ''}`} // Allow pointer events if selected
-            style={{
-              left: 0,
-              top: 0,
-              // SVG covers the whole canvas, but line is drawn specifically
-            }}
-            // Use onMouseDown on the line itself for better selection precision
+            className={`absolute top-0 left-0 w-full h-full pointer-events-none ${selected ? 'cursor-pointer' : ''}`}
+            style={{ left: 0, top: 0 }}
           >
-            {/* Arrow line - make it thicker for easier selection */}
             <line
               x1={fromX}
               y1={fromY}
               x2={endX}
               y2={endY}
-              stroke={element.color || '#000000'} // Default to black if no color specified
-              strokeWidth={selected ? "4" : "2"} // Thicker when selected
+              stroke={element.color || '#000000'}
+              strokeWidth={selected ? "4" : "2"}
               markerEnd="url(#arrowhead)"
-              pointerEvents="stroke" // Only the stroke should capture events
-              onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }}
-              onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }}
+              pointerEvents="stroke"
+              onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Keep stopPropagation for line selection
+              onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Keep stopPropagation for line selection
               style={{ cursor: readOnly ? 'default' : 'pointer' }}
             />
-
-            {/* Arrow head */}
             <defs>
-              <marker
-                id="arrowhead"
-                markerWidth="10"
-                markerHeight="7"
-                refX="0" // Position relative to the end of the line
-                refY="3.5"
-                orient="auto"
-              >
-                <polygon
-                  points="0 0, 10 3.5, 0 7"
-                  fill={element.color || '#000000'} // Default to black if no color specified
-                />
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill={element.color || '#000000'} />
               </marker>
             </defs>
-
-            {/* Render controls menu near the arrow if selected */}
             {selected && renderControlsMenu()}
           </svg>
         );
@@ -549,37 +491,20 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               width: element.width,
               height: element.height,
               cursor: readOnly ? 'default' : 'move',
-              position: 'absolute' // Ensure positioning context
+              position: 'absolute'
             }}
-            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
-            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             <svg width="100%" height="100%" viewBox={`0 0 ${element.width || 100} ${element.height || 100}`}>
               {element.shapeType === 'circle' && (
-                <circle
-                  cx={(element.width || 100) / 2}
-                  cy={(element.height || 100) / 2}
-                  r={Math.min(element.width || 100, element.height || 100) / 2 - 2}
-                  fill={element.color || '#ffffff'}
-                  stroke="#000000"
-                  strokeWidth="2"
-                />
+                <circle cx={(element.width || 100) / 2} cy={(element.height || 100) / 2} r={Math.min(element.width || 100, element.height || 100) / 2 - 2} fill={element.color || '#ffffff'} stroke="#000000" strokeWidth="2" />
               )}
               {element.shapeType === 'triangle' && (
-                <polygon
-                  points={`${(element.width || 100) / 2},5 5,${(element.height || 100) - 5} ${(element.width || 100) - 5},${(element.height || 100) - 5}`}
-                  fill={element.color || '#ffffff'}
-                  stroke="#000000"
-                  strokeWidth="2"
-                />
+                <polygon points={`${(element.width || 100) / 2},5 5,${(element.height || 100) - 5} ${(element.width || 100) - 5},${(element.height || 100) - 5}`} fill={element.color || '#ffffff'} stroke="#000000" strokeWidth="2" />
               )}
               {element.shapeType === 'diamond' && (
-                <polygon
-                  points={`${(element.width || 100) / 2},5 ${(element.width || 100) - 5},${(element.height || 100) / 2} ${(element.width || 100) / 2},${(element.height || 100) - 5} 5,${(element.height || 100) / 2}`}
-                  fill={element.color || '#ffffff'}
-                  stroke="#000000"
-                  strokeWidth="2"
-                />
+                <polygon points={`${(element.width || 100) / 2},5 ${(element.width || 100) - 5},${(element.height || 100) / 2} ${(element.width || 100) / 2},${(element.height || 100) - 5} 5,${(element.height || 100) / 2}`} fill={element.color || '#ffffff'} stroke="#000000" strokeWidth="2" />
               )}
             </svg>
             {renderResizeHandle()}
