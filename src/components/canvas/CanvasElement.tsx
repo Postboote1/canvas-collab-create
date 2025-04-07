@@ -56,6 +56,21 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     }
   }, [isEditing, element.content]);
   
+  // Cleanup event listeners when component unmounts or when resizing stops
+  useEffect(() => {
+    // Only add the event listeners if we're currently resizing
+    if (isResizing) {
+      window.addEventListener('mousemove', handleResizeMove);
+      window.addEventListener('mouseup', handleResizeEnd);
+      
+      // Cleanup
+      return () => {
+        window.removeEventListener('mousemove', handleResizeMove);
+        window.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [isResizing]); // Only re-run this effect if isResizing changes
+  
   const handleDoubleClick = () => {
     if (!readOnly && (element.type === 'card' || element.type === 'text')) {
       setIsEditing(true);
@@ -98,10 +113,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       width: element.width || 200, 
       height: element.height || 150 
     });
-    
-    // Add event listeners for resize
-    document.addEventListener('mousemove', handleResizeMove);
-    document.addEventListener('mouseup', handleResizeEnd);
   };
   
   const handleResizeMove = (e: MouseEvent) => {
@@ -121,10 +132,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   
   const handleResizeEnd = () => {
     setIsResizing(false);
-    
-    // Remove event listeners
-    document.removeEventListener('mousemove', handleResizeMove);
-    document.removeEventListener('mouseup', handleResizeEnd);
   };
   
   const handleDelete = () => {
