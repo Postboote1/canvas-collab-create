@@ -327,12 +327,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         });
       }
       
-      // Reset to select tool after drawing
-      setActiveTool('select');
+      // Clear drawing points but KEEP the draw tool active
+      setDrawingPoints([]);
+      setIsDrawing(false);
+    } else {
+      setIsDrawing(false);
+      setDrawingPoints([]);
     }
     
-    setIsDrawing(false);
-    setDrawingPoints([]);
     setIsDragging(false);
   };
   
