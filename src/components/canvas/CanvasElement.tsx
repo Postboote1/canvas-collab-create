@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { CanvasElement as ICanvasElement } from '@/contexts/CanvasContext';
-import { 
+import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
@@ -37,19 +36,19 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   // Calculate minimum heights for cards based on content
   useEffect(() => {
     if (element.type === 'card' && elementRef.current && !isEditing && !isResizing) {
       const contentHeight = elementRef.current.scrollHeight;
       const currentHeight = element.height || 150;
-      
+
       // If content height is greater than current height, update it
       if (contentHeight > currentHeight) {
         onUpdateElement({ height: contentHeight + 24 }); // Add some padding
       }
     }
-  }, [element.content, element.type, isEditing, isResizing, onUpdateElement]);
+  }, [element.content, element.type, isEditing, isResizing, onUpdateElement, element.height]); // Added element.height dependency
 
   // Auto-resize textarea when editing
   useEffect(() => {
@@ -58,38 +57,49 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
     }
   }, [isEditing, element.content]);
-  
+
   // Cleanup event listeners when component unmounts or when resizing stops
   useEffect(() => {
+    const handleResizeMoveGlobal = (e: MouseEvent) => {
+        if (isResizing) {
+            handleResizeMove(e);
+        }
+    };
+    const handleResizeEndGlobal = () => {
+        if (isResizing) {
+            handleResizeEnd();
+        }
+    };
+
     // Only add the event listeners if we're currently resizing
     if (isResizing) {
-      window.addEventListener('mousemove', handleResizeMove);
-      window.addEventListener('mouseup', handleResizeEnd);
-      
+      window.addEventListener('mousemove', handleResizeMoveGlobal);
+      window.addEventListener('mouseup', handleResizeEndGlobal);
+
       // Cleanup
       return () => {
-        window.removeEventListener('mousemove', handleResizeMove);
-        window.removeEventListener('mouseup', handleResizeEnd);
+        window.removeEventListener('mousemove', handleResizeMoveGlobal);
+        window.removeEventListener('mouseup', handleResizeEndGlobal);
       };
     }
   }, [isResizing]); // Only re-run this effect if isResizing changes
-  
+
   const handleDoubleClick = () => {
     if (!readOnly && (element.type === 'card' || element.type === 'text')) {
       setIsEditing(true);
     }
   };
-  
+
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onUpdateElement({ content: e.target.value });
-    
+
     // Auto-resize textarea
     if (textAreaRef.current) {
       textAreaRef.current.style.height = 'auto';
       textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
     }
   };
-  
+
   const handleBlur = () => {
     setIsEditing(false);
   };
@@ -98,58 +108,58 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     onUpdateElement({ color: color });
     setShowColorPicker(false);
   };
-  
+
   const handleContextMenu = (e: React.MouseEvent) => {
     if (readOnly) return;
     e.preventDefault();
-    setShowColorPicker(true);
+    // Context menu is handled by the ContextMenu component trigger
   };
-  
+
   const handleResizeStart = (e: React.MouseEvent) => {
     if (readOnly) return;
-    
+
     e.stopPropagation();
     e.preventDefault(); // Prevent other handlers from executing
     setIsResizing(true);
     setResizeStartPos({ x: e.clientX, y: e.clientY });
-    setOriginalDimensions({ 
-      width: element.width || 200, 
-      height: element.height || 150 
+    setOriginalDimensions({
+      width: element.width || 200,
+      height: element.height || 150
     });
   };
-  
+
   const handleResizeMove = (e: MouseEvent) => {
-    if (!isResizing) return;
-    
+    // This function is now called by the global event listener
     const deltaX = e.clientX - resizeStartPos.x;
     const deltaY = e.clientY - resizeStartPos.y;
-    
+
     const newWidth = Math.max(100, originalDimensions.width + deltaX);
     const newHeight = Math.max(75, originalDimensions.height + deltaY);
-    
-    onUpdateElement({ 
-      width: newWidth, 
-      height: newHeight 
+
+    onUpdateElement({
+      width: newWidth,
+      height: newHeight
     });
   };
-  
+
   const handleResizeEnd = () => {
+    // This function is now called by the global event listener
     setIsResizing(false);
   };
-  
+
   const handleDelete = () => {
     if (onDeleteElement) {
       onDeleteElement(element.id);
     }
   };
-  
+
   const renderResizeHandle = () => {
     if (!selected || readOnly || element.type === 'text' || element.type === 'drawing' || element.type === 'arrow') {
       return null;
     }
-    
+
     return (
-      <div 
+      <div
         className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 cursor-se-resize z-10 rounded-bl flex items-center justify-center"
         onMouseDown={handleResizeStart}
         onTouchStart={(e) => {
@@ -173,7 +183,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     if (!selected || readOnly) {
       return null;
     }
-    
+
     return (
       <div className="absolute -top-8 right-0 flex items-center gap-1 bg-background/80 backdrop-blur-sm border rounded p-1 shadow-md z-20">
         {element.type !== 'drawing' && (
@@ -198,25 +208,25 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
                   ))}
                 </div>
                 <div className="mt-2">
-                  <input 
-                    type="color" 
-                    value={element.color || '#FFFFFF'} 
-                    onChange={(e) => handleColorChange(e.target.value)} 
-                    className="w-full h-6" 
+                  <input
+                    type="color"
+                    value={element.color || '#FFFFFF'}
+                    onChange={(e) => handleColorChange(e.target.value)}
+                    className="w-full h-6"
                   />
                 </div>
               </div>
             </PopoverContent>
           </Popover>
         )}
-        
+
         {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
           <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0" onClick={handleResizeStart}>
             <Maximize size={14} />
             <span className="sr-only">Resize</span>
           </Button>
         )}
-        
+
         <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0 text-destructive" onClick={handleDelete}>
           <Trash size={14} />
           <span className="sr-only">Delete</span>
@@ -224,15 +234,15 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       </div>
     );
   };
-  
+
   const getArrowCoordinates = () => {
     if (element.type !== 'arrow' || !element.fromId || !element.toId) return null;
-    
+
     const fromElement = allElements.find(el => el.id === element.fromId);
     const toElement = allElements.find(el => el.id === element.toId);
-    
+
     if (!fromElement || !toElement) return null;
-    
+
     // Calculate boundaries of elements
     const fromRect = {
       left: fromElement.x,
@@ -242,7 +252,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       centerX: fromElement.x + (fromElement.width || 100) / 2,
       centerY: fromElement.y + (fromElement.height || 50) / 2,
     };
-    
+
     const toRect = {
       left: toElement.x,
       top: toElement.y,
@@ -251,7 +261,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       centerX: toElement.x + (toElement.width || 100) / 2,
       centerY: toElement.y + (toElement.height || 50) / 2,
     };
-    
+
     // Find the shortest path for the arrow between the two elements
     const possiblePaths = [
       // From right edge to left edge
@@ -275,26 +285,26 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         to: { x: toRect.centerX, y: toRect.bottom }
       }
     ];
-    
+
     // Find the shortest path
     let shortestPath = possiblePaths[0];
     let shortestDistance = Math.hypot(
       shortestPath.to.x - shortestPath.from.x,
       shortestPath.to.y - shortestPath.from.y
     );
-    
+
     for (let i = 1; i < possiblePaths.length; i++) {
       const distance = Math.hypot(
         possiblePaths[i].to.x - possiblePaths[i].from.x,
         possiblePaths[i].to.y - possiblePaths[i].from.y
       );
-      
+
       if (distance < shortestDistance) {
         shortestDistance = distance;
         shortestPath = possiblePaths[i];
       }
     }
-    
+
     return {
       fromX: shortestPath.from.x,
       fromY: shortestPath.from.y,
@@ -302,12 +312,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       toY: shortestPath.to.y
     };
   };
-  
+
   const renderContextMenu = (children: React.ReactNode) => {
     if (readOnly) {
       return children;
     }
-    
+
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>
@@ -333,7 +343,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       </ContextMenu>
     );
   };
-  
+
   const renderElement = () => {
     switch (element.type) {
       case 'card':
@@ -349,9 +359,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               backgroundColor: element.color || '#ffffff',
               cursor: readOnly ? 'default' : 'move',
               minHeight: '75px',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              position: 'absolute' // Ensure positioning context
             }}
             onDoubleClick={handleDoubleClick}
+            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
+            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
           >
             {isEditing ? (
               <textarea
@@ -372,7 +385,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             {selected && renderControlsMenu()}
           </div>
         );
-        
+
       case 'text':
         return renderContextMenu(
           <div
@@ -380,9 +393,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             style={{
               left: element.x,
               top: element.y,
-              cursor: readOnly ? 'default' : 'move'
+              cursor: readOnly ? 'default' : 'move',
+              position: 'absolute' // Ensure positioning context
             }}
             onDoubleClick={handleDoubleClick}
+            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
+            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
           >
             {isEditing ? (
               <textarea
@@ -406,43 +422,32 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             {selected && renderControlsMenu()}
           </div>
         );
-        
+
       case 'drawing':
         if (!element.points || element.points.length < 2) return null;
-        
+
+        // Render the drawing path using SVG polyline
         return (
           <svg
             className="absolute top-0 left-0 w-full h-full pointer-events-none"
             style={{
-              left: 0,
-              top: 0
+              left: 0, // Position SVG relative to canvas container
+              top: 0,
+              // Ensure SVG itself doesn't capture pointer events meant for canvas
             }}
           >
-            <path
-              d={element.points.reduce((path, point, i) => {
-                // Start with a move to the first point
-                if (i === 0) {
-                  return `M ${point.x} ${point.y}`;
-                }
-                // Then draw lines to subsequent points
-                return `${path} L ${point.x} ${point.y}`;
-              }, '')}
+            <polyline
+              points={element.points.map(p => `${p.x},${p.y}`).join(' ')} // Use only x and y
               fill="none"
               stroke={element.color || '#000000'}
-              strokeWidth="2"
+              strokeWidth="2" // Fixed stroke width for simplicity
               strokeLinecap="round"
               strokeLinejoin="round"
-              // Apply varying stroke width based on pressure if available
-              style={{
-                strokeWidth: element.points.some(p => p.pressure !== undefined) 
-                  ? element.points.map(p => Math.max(1, (p.pressure || 1) * 5)).join(',') 
-                  : '2'
-              }}
-              vectorEffect="non-scaling-stroke"
+              vectorEffect="non-scaling-stroke" // Keep stroke visually consistent
             />
           </svg>
         );
-        
+
       case 'image':
         return renderContextMenu(
           <div
@@ -453,8 +458,11 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               top: element.y,
               width: element.width,
               height: element.height,
-              cursor: readOnly ? 'default' : 'move'
+              cursor: readOnly ? 'default' : 'move',
+              position: 'absolute' // Ensure positioning context
             }}
+            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
+            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
           >
             <img
               src={element.imageUrl}
@@ -465,19 +473,19 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             {selected && renderControlsMenu()}
           </div>
         );
-        
+
       case 'arrow':
         const coords = getArrowCoordinates();
-        
+
         if (!coords) return null;
         const { fromX, fromY, toX, toY } = coords;
-        
+
         // Calculate direction and marker offset
         const dx = toX - fromX;
         const dy = toY - fromY;
         const angle = Math.atan2(dy, dx);
         const markerOffset = 8; // Offset for the arrowhead
-        
+
         // Calculate the endpoint with offset to place arrowhead correctly
         const endX = toX - markerOffset * Math.cos(angle);
         const endY = toY - markerOffset * Math.sin(angle);
@@ -485,31 +493,36 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         // Make arrows selectable by wrapping in a context menu
         return renderContextMenu(
           <svg
-            className={`absolute top-0 left-0 w-full h-full ${selected ? 'cursor-pointer' : ''}`}
+            className={`absolute top-0 left-0 w-full h-full pointer-events-none ${selected ? 'cursor-pointer' : ''}`} // Allow pointer events if selected
             style={{
               left: 0,
-              top: 0
+              top: 0,
+              // SVG covers the whole canvas, but line is drawn specifically
             }}
-            onClick={() => !readOnly && onSelectElement(element.id)}
+            // Use onMouseDown on the line itself for better selection precision
           >
-            {/* Arrow line */}
+            {/* Arrow line - make it thicker for easier selection */}
             <line
               x1={fromX}
               y1={fromY}
               x2={endX}
               y2={endY}
               stroke={element.color || '#000000'} // Default to black if no color specified
-              strokeWidth="2"
+              strokeWidth={selected ? "4" : "2"} // Thicker when selected
               markerEnd="url(#arrowhead)"
+              pointerEvents="stroke" // Only the stroke should capture events
+              onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }}
+              onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }}
+              style={{ cursor: readOnly ? 'default' : 'pointer' }}
             />
-            
+
             {/* Arrow head */}
             <defs>
               <marker
                 id="arrowhead"
                 markerWidth="10"
                 markerHeight="7"
-                refX="0"
+                refX="0" // Position relative to the end of the line
                 refY="3.5"
                 orient="auto"
               >
@@ -519,11 +532,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
                 />
               </marker>
             </defs>
-            
+
+            {/* Render controls menu near the arrow if selected */}
             {selected && renderControlsMenu()}
           </svg>
         );
-        
+
       case 'shape':
         return renderContextMenu(
           <div
@@ -534,15 +548,18 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               top: element.y,
               width: element.width,
               height: element.height,
-              cursor: readOnly ? 'default' : 'move'
+              cursor: readOnly ? 'default' : 'move',
+              position: 'absolute' // Ensure positioning context
             }}
+            onMouseDown={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on mouse down
+            onTouchStart={(e) => { e.stopPropagation(); if (!readOnly) onSelectElement(element.id); }} // Select on touch start
           >
-            <svg width="100%" height="100%" viewBox={`0 0 ${element.width} ${element.height}`}>
+            <svg width="100%" height="100%" viewBox={`0 0 ${element.width || 100} ${element.height || 100}`}>
               {element.shapeType === 'circle' && (
                 <circle
-                  cx={element.width! / 2}
-                  cy={element.height! / 2}
-                  r={Math.min(element.width!, element.height!) / 2 - 2}
+                  cx={(element.width || 100) / 2}
+                  cy={(element.height || 100) / 2}
+                  r={Math.min(element.width || 100, element.height || 100) / 2 - 2}
                   fill={element.color || '#ffffff'}
                   stroke="#000000"
                   strokeWidth="2"
@@ -550,7 +567,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               )}
               {element.shapeType === 'triangle' && (
                 <polygon
-                  points={`${element.width! / 2},5 5,${element.height! - 5} ${element.width! - 5},${element.height! - 5}`}
+                  points={`${(element.width || 100) / 2},5 5,${(element.height || 100) - 5} ${(element.width || 100) - 5},${(element.height || 100) - 5}`}
                   fill={element.color || '#ffffff'}
                   stroke="#000000"
                   strokeWidth="2"
@@ -558,7 +575,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               )}
               {element.shapeType === 'diamond' && (
                 <polygon
-                  points={`${element.width! / 2},5 ${element.width! - 5},${element.height! / 2} ${element.width! / 2},${element.height! - 5} 5,${element.height! / 2}`}
+                  points={`${(element.width || 100) / 2},5 ${(element.width || 100) - 5},${(element.height || 100) / 2} ${(element.width || 100) / 2},${(element.height || 100) - 5} 5,${(element.height || 100) / 2}`}
                   fill={element.color || '#ffffff'}
                   stroke="#000000"
                   strokeWidth="2"
@@ -569,12 +586,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             {selected && renderControlsMenu()}
           </div>
         );
-        
+
       default:
         return null;
     }
   };
-  
+
   return renderElement();
 };
 

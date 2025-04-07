@@ -1,3 +1,4 @@
+// src/components/canvas/CanvasEditor.tsx
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -16,10 +17,10 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
   const { isConnected, connect, disconnect, sendMessage } = useWebSocket();
-  
+
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
-  const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number; pressure?: number }[]>([]);
+  const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); // Removed pressure
   const [isDrawing, setIsDrawing] = useState(false);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [arrowStart, setArrowStart] = useState<string | null>(null);
@@ -29,37 +30,37 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const [scale, setScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
   const [panStartPosition, setPanStartPosition] = useState({ x: 0, y: 0 });
-  
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Connect to WebSocket when canvas changes
   useEffect(() => {
     if (currentCanvas && user) {
       connect(currentCanvas.id, user.id);
-      
+
       return () => {
         disconnect();
       };
     }
   }, [currentCanvas, user, connect, disconnect]);
-  
+
   // Auto-save every 30 seconds
   useEffect(() => {
     if (!readOnly && currentCanvas) {
       const interval = setInterval(() => {
         saveCanvas();
       }, 30000);
-      
+
       return () => clearInterval(interval);
     }
   }, [readOnly, currentCanvas, saveCanvas]);
-  
+
   // Handle mouse down on canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
-    
+
     // Handle right-click for canvas panning
     if (e.button === 2) {
       e.preventDefault();
@@ -67,11 +68,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       setPanStartPosition({ x: e.clientX, y: e.clientY });
       return;
     }
-    
+
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale + viewportPosition.x;
     const y = (e.clientY - rect.top) / scale + viewportPosition.y;
-    
+
     if (activeTool === 'select') {
       // Check if we're clicking on an element
       const clickedElement = currentCanvas?.elements.find(element => {
@@ -83,9 +84,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
             y <= element.y + (element.height || 0)
           );
         }
+        // Add check for arrow type if needed for selection
+        // if (element.type === 'arrow') { ... }
         return false;
       });
-      
+
       if (clickedElement) {
         setSelectedElement(clickedElement.id);
         setIsDragging(true);
@@ -106,12 +109,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         height: 150,
         color: activeColor
       };
-      
+
       addElement(newCard);
       toast.success('Card added', {
         position: 'bottom-center',
       });
-      
+
       if (isConnected) {
         sendMessage({
           type: 'addElement',
@@ -119,7 +122,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
-      
+
       // Reset to select tool after adding a card
       setActiveTool('select');
     } else if (activeTool === 'text') {
@@ -131,12 +134,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         fontSize: 16,
         color: activeColor
       };
-      
+
       addElement(newText);
       toast.success('Text added', {
         position: 'bottom-center',
       });
-      
+
       if (isConnected) {
         sendMessage({
           type: 'addElement',
@@ -144,17 +147,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
-      
+
       // Reset to select tool after adding text
       setActiveTool('select');
     } else if (activeTool === 'draw') {
       setIsDrawing(true);
-      // Get pressure from pointer events if available
-      const pressure = (e.nativeEvent as PointerEvent).pressure !== undefined && 
-                       (e.nativeEvent as PointerEvent).pressure !== 0 ? 
-                       (e.nativeEvent as PointerEvent).pressure : 1;
-      
-      setDrawingPoints([{ x, y, pressure }]);
+      setDrawingPoints([{ x, y }]); // Start drawing with the first point
     } else if (activeTool === 'arrow') {
       // Find element under the cursor
       const element = currentCanvas?.elements.find(el => {
@@ -168,24 +166,24 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         }
         return false;
       });
-      
+
       if (element) {
         if (arrowStart) {
           // If we already have a start point, create the arrow
           const startElement = currentCanvas?.elements.find(el => el.id === arrowStart);
-          
+
           if (startElement && startElement.id !== element.id) {
             const newArrow: Omit<CanvasElementType, 'id'> = {
               type: 'arrow',
-              x: startElement.x + (startElement.width || 0) / 2,
-              y: startElement.y + (startElement.height || 0) / 2,
+              x: 0, // Position doesn't strictly matter for arrows
+              y: 0,
               fromId: startElement.id,
               toId: element.id,
-              color: '#000000' // Set black color by default for arrows
+              color: '#000000' // Default arrow color
             };
-            
+
             addElement(newArrow);
-            
+
             if (isConnected) {
               sendMessage({
                 type: 'addElement',
@@ -193,18 +191,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                 canvasId: currentCanvas!.id
               });
             }
-            
+
             setArrowStart(null);
-            // Toast to indicate arrow was created
             toast.success('Arrow created', {
               position: 'bottom-center',
             });
-            // Reset to select tool after adding an arrow
             setActiveTool('select');
           } else {
             toast.error("Can't connect an element to itself", {
               position: 'bottom-center',
             });
+            setArrowStart(null); // Reset if connection failed
           }
         } else {
           // Set the start element
@@ -214,9 +211,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           });
         }
       } else {
-        toast.error('Please click on an element to create an arrow', {
-          position: 'bottom-center',
-        });
+        // If clicking empty space while arrow tool is active, reset arrow start
+        if (arrowStart) {
+          setArrowStart(null);
+          toast.info('Arrow creation cancelled', {
+            position: 'bottom-center',
+          });
+        } else {
+          toast.error('Please click on an element to start an arrow', {
+            position: 'bottom-center',
+          });
+        }
       }
     } else if (activeTool === 'circle' || activeTool === 'triangle' || activeTool === 'diamond') {
       const newShape: Omit<CanvasElementType, 'id'> = {
@@ -228,12 +233,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         height: 100,
         color: activeColor
       };
-      
+
       addElement(newShape);
       toast.success(`${activeTool} shape added`, {
         position: 'bottom-center',
       });
-      
+
       if (isConnected) {
         sendMessage({
           type: 'addElement',
@@ -241,80 +246,77 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
-      
-      // Reset to select tool after adding a shape
+
       setActiveTool('select');
     } else if (activeTool === 'image' && fileInputRef.current) {
-      // Trigger file input click when image tool is active
       fileInputRef.current.click();
     }
   };
-  
+
   // Handle touch start for mobile and stylus input
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
-    
+
     const touch = e.touches[0];
     if (!touch) return;
-    
+
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (touch.clientX - rect.left) / scale + viewportPosition.x;
     const y = (touch.clientY - rect.top) / scale + viewportPosition.y;
-    
+
     if (activeTool === 'draw') {
       setIsDrawing(true);
-      
-      // Get pressure from touch events if available (for stylus)
-      // Force is equivalent to pressure in the Touch API
-      const pressure = touch.force !== undefined && touch.force !== 0 ? touch.force : 1;
-      
-      setDrawingPoints([{ x, y, pressure }]);
+      setDrawingPoints([{ x, y }]); // Start drawing
       e.preventDefault(); // Prevent scrolling while drawing
     }
+    // Simulate mouse down for other tools or selection/dragging
+    else if (activeTool === 'select' || activeTool === 'arrow') {
+       const mouseEvent = new MouseEvent('mousedown', {
+         clientX: touch.clientX,
+         clientY: touch.clientY,
+         button: 0 // Simulate left click
+       });
+       handleCanvasMouseDown(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+    }
   };
-  
+
   // Handle mouse move on canvas with improved panning
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
-    
+
     // Improved panning with right mouse button
     if (isPanning) {
       const deltaX = e.clientX - panStartPosition.x;
       const deltaY = e.clientY - panStartPosition.y;
-      
+
       setViewportPosition(prev => ({
         x: prev.x - deltaX / scale,
         y: prev.y - deltaY / scale
       }));
-      
+
       setPanStartPosition({
         x: e.clientX,
         y: e.clientY
       });
-      
-      return;
+
+      return; // Don't process other move events while panning
     }
-    
+
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale + viewportPosition.x;
     const y = (e.clientY - rect.top) / scale + viewportPosition.y;
-    
+
     if (isDrawing && activeTool === 'draw') {
-      // Get pressure from pointer events if available
-      const pressure = (e.nativeEvent as PointerEvent).pressure !== undefined && 
-                       (e.nativeEvent as PointerEvent).pressure !== 0 ? 
-                       (e.nativeEvent as PointerEvent).pressure : 1;
-      
-      setDrawingPoints([...drawingPoints, { x, y, pressure }]);
+      setDrawingPoints([...drawingPoints, { x, y }]); // Add point to current drawing
     } else if (isDragging && selectedElement) {
       const element = currentCanvas?.elements.find(el => el.id === selectedElement);
-      
+
       if (element) {
         const newX = x - dragOffset.x;
         const newY = y - dragOffset.y;
-        
+
         updateElement(selectedElement, { x: newX, y: newY });
-        
+
         if (isConnected) {
           sendMessage({
             type: 'updateElement',
@@ -328,50 +330,55 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       }
     }
   };
-  
+
   // Handle touch move for mobile and stylus input
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly || !isDrawing) return;
-    
+
     const touch = e.touches[0];
     if (!touch) return;
-    
+
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (touch.clientX - rect.left) / scale + viewportPosition.x;
     const y = (touch.clientY - rect.top) / scale + viewportPosition.y;
-    
+
     if (activeTool === 'draw') {
-      // Get pressure from touch events if available (for stylus)
-      const pressure = touch.force !== undefined && touch.force !== 0 ? touch.force : 1;
-      
-      setDrawingPoints([...drawingPoints, { x, y, pressure }]);
+      setDrawingPoints([...drawingPoints, { x, y }]); // Add point
       e.preventDefault(); // Prevent scrolling while drawing
     }
+     // Simulate mouse move for dragging
+    else if (isDragging && selectedElement) {
+       const mouseEvent = new MouseEvent('mousemove', {
+         clientX: touch.clientX,
+         clientY: touch.clientY
+       });
+       handleCanvasMouseMove(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+    }
   };
-  
+
   // Handle mouse up on canvas
   const handleCanvasMouseUp = () => {
     if (readOnly) return;
-    
+
     if (isPanning) {
       setIsPanning(false);
-      return;
+      return; // Don't process other mouse up events if panning just ended
     }
-    
+
     if (isDrawing && activeTool === 'draw' && drawingPoints.length > 1) {
       const newDrawing: Omit<CanvasElementType, 'id'> = {
         type: 'drawing',
         points: drawingPoints,
-        x: drawingPoints[0].x,
-        y: drawingPoints[0].y,
+        x: 0, // Or calculate bounding box if needed
+        y: 0,
         color: activeColor
       };
-      
+
       addElement(newDrawing);
       toast.success('Drawing added', {
         position: 'bottom-center',
       });
-      
+
       if (isConnected) {
         sendMessage({
           type: 'addElement',
@@ -379,98 +386,114 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
-      
-      // Clear drawing points but KEEP the draw tool active
-      setDrawingPoints([]);
-      setIsDrawing(false);
-    } else {
-      setIsDrawing(false);
-      setDrawingPoints([]);
+
+      // Reset to select tool after drawing
+      setActiveTool('select');
     }
-    
+
+    setIsDrawing(false);
+    setDrawingPoints([]);
     setIsDragging(false);
+    // Don't reset arrowStart here, allow user to click another element
   };
-  
+
   // Handle context menu (right-click)
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     if (readOnly) return;
-    
-    // Prevent the default context menu
-    e.preventDefault();
+    e.preventDefault(); // Prevent default context menu
   };
-  
-  // Handle canvas wheel for both zooming and scrolling with improved horizontal scrolling
+
+  // Handle canvas wheel for zooming and panning
   const handleCanvasWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    // Zoom with ctrl/cmd + wheel
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
+    if (!canvasRef.current) return;
+
+    e.preventDefault(); // Prevent page scroll
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Calculate world coordinates before zoom/pan
+    const worldXBefore = mouseX / scale + viewportPosition.x;
+    const worldYBefore = mouseY / scale + viewportPosition.y;
+
+    let newScale = scale;
+    let newViewportX = viewportPosition.x;
+    let newViewportY = viewportPosition.y;
+
+    if (e.ctrlKey || e.metaKey) { // Zooming
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setScale(prevScale => Math.max(0.1, Math.min(prevScale * delta, 5)));
-    } 
-    // Horizontal scrolling with shift + wheel
-    else if (e.shiftKey) {
-      e.preventDefault();
-      setViewportPosition(prev => ({
-        x: prev.x + e.deltaY / scale,
-        y: prev.y
-      }));
-    } 
-    // Regular scrolling
-    else {
-      e.preventDefault();
-      setViewportPosition(prev => ({
-        x: prev.x + e.deltaX / scale,
-        y: prev.y + e.deltaY / scale
-      }));
+      newScale = Math.max(0.1, Math.min(scale * delta, 5));
+    } else { // Panning
+      newViewportX += e.deltaX / scale;
+      newViewportY += e.deltaY / scale;
     }
+
+    // Calculate world coordinates after zoom/pan
+    const worldXAfter = mouseX / newScale + newViewportX;
+    const worldYAfter = mouseY / newScale + newViewportY;
+
+    // Adjust viewport position to keep mouse position stable during zoom
+    if (e.ctrlKey || e.metaKey) {
+        newViewportX += (worldXBefore - worldXAfter);
+        newViewportY += (worldYBefore - worldYAfter);
+    }
+
+    setScale(newScale);
+    setViewportPosition({ x: newViewportX, y: newViewportY });
   };
-  
+
+
   // Handle element deletion
   const handleDeleteElement = (id: string) => {
     deleteElement(id);
     toast.success('Element deleted', {
       position: 'bottom-center',
     });
-    
+
     if (isConnected) {
       sendMessage({
         type: 'deleteElement',
-        payload: id,
+        payload: { id }, // Send id in payload object
         canvasId: currentCanvas!.id
       });
     }
-    
+
     setSelectedElement(null);
+    if (arrowStart === id) {
+      setArrowStart(null); // Cancel arrow creation if start element is deleted
+    }
   };
-  
+
   // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !canvasRef.current || readOnly) return;
-    
+
     const file = e.target.files[0];
     const reader = new FileReader();
-    
+
     reader.onload = (event) => {
       if (!event.target?.result) return;
-      
+
       const rect = canvasRef.current!.getBoundingClientRect();
-      const centerX = ((window.innerWidth / 2) - rect.left) / scale + viewportPosition.x;
-      const centerY = ((window.innerHeight / 2) - rect.top) / scale + viewportPosition.y;
-      
+      // Place image in the center of the current view
+      const centerX = (rect.width / 2) / scale + viewportPosition.x;
+      const centerY = (rect.height / 2) / scale + viewportPosition.y;
+
       const newImage: Omit<CanvasElementType, 'id'> = {
         type: 'image',
-        x: centerX - 100,
+        x: centerX - 100, // Center based on default size
         y: centerY - 75,
         width: 200,
         height: 150,
         imageUrl: event.target.result as string
       };
-      
+
       addElement(newImage);
       toast.success('Image added', {
         position: 'bottom-center',
       });
-      
+
       if (isConnected) {
         sendMessage({
           type: 'addElement',
@@ -478,110 +501,116 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           canvasId: currentCanvas!.id
         });
       }
-      
-      // Reset to select tool after adding an image
+
       setActiveTool('select');
     };
-    
+
     reader.readAsDataURL(file);
-    e.target.value = '';
+    e.target.value = ''; // Clear input
   };
 
+  // --- Export Functions ---
   const handleExportAsImage = () => {
     if (!contentRef.current) {
-      toast.error('Canvas not ready');
+      toast.error('Canvas content not ready for export');
       return;
     }
 
-    const tempScale = scale;
+    // Temporarily reset scale and position for accurate capture
+    const originalScale = scale;
+    const originalPosition = { ...viewportPosition };
+    // TODO: Calculate actual bounds of content instead of resetting to 0,0
+    // For now, reset to capture from top-left; might miss content
     setScale(1);
-    
-    // Wait for the next render with correct scale before capturing
+    setViewportPosition({ x: 0, y: 0 });
+
     setTimeout(() => {
       html2canvas(contentRef.current!, {
-        backgroundColor: 'white',
+        backgroundColor: null, // Transparent background
         scale: window.devicePixelRatio,
         allowTaint: true,
         useCORS: true,
+        // TODO: Set width/height/x/y based on calculated content bounds
       }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const link = document.createElement('a');
         link.download = `${currentCanvas?.name || 'canvas'}_export.png`;
         link.href = imgData;
         link.click();
-        
-        // Restore scale
-        setScale(tempScale);
         toast.success('Canvas exported as image');
       }).catch(err => {
-        console.error('Export failed:', err);
-        toast.error('Failed to export canvas');
-        setScale(tempScale);
+        console.error('Image export failed:', err);
+        toast.error('Failed to export canvas as image');
+      }).finally(() => {
+        // Restore original scale and position
+        setScale(originalScale);
+        setViewportPosition(originalPosition);
       });
     }, 100);
   };
 
   const handleExportAsPDF = () => {
     if (!contentRef.current) {
-      toast.error('Canvas not ready');
+      toast.error('Canvas content not ready for export');
       return;
     }
 
-    const tempScale = scale;
+    const originalScale = scale;
+    const originalPosition = { ...viewportPosition };
+    // TODO: Calculate actual bounds
     setScale(1);
-    
-    // Wait for the next render with correct scale before capturing
+    setViewportPosition({ x: 0, y: 0 });
+
     setTimeout(() => {
       html2canvas(contentRef.current!, {
-        backgroundColor: 'white',
-        scale: window.devicePixelRatio,
+        backgroundColor: '#ffffff', // White background for PDF
+        scale: window.devicePixelRatio * 2, // Higher scale for PDF quality
         allowTaint: true,
         useCORS: true,
+        // TODO: Set width/height/x/y based on calculated content bounds
       }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
-          orientation: 'landscape',
+          orientation: canvas.width > canvas.height ? 'l' : 'p',
           unit: 'px',
           format: [canvas.width, canvas.height]
         });
-        
         pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
         pdf.save(`${currentCanvas?.name || 'canvas'}_export.pdf`);
-        
-        // Restore scale
-        setScale(tempScale);
         toast.success('Canvas exported as PDF');
       }).catch(err => {
-        console.error('Export failed:', err);
-        toast.error('Failed to export canvas');
-        setScale(tempScale);
+        console.error('PDF export failed:', err);
+        toast.error('Failed to export canvas as PDF');
+      }).finally(() => {
+        setScale(originalScale);
+        setViewportPosition(originalPosition);
       });
     }, 100);
   };
 
+  // Expose export methods globally
   useEffect(() => {
     if (!currentCanvas) return;
-    
-    // Pass these methods to window object for external access
     if (typeof window !== 'undefined') {
-      window.__canvasExportMethods = {
+      (window as any).__canvasExportMethods = {
         exportAsImage: handleExportAsImage,
         exportAsPDF: handleExportAsPDF
       };
     }
-    
     return () => {
       if (typeof window !== 'undefined') {
-        delete window.__canvasExportMethods;
+        delete (window as any).__canvasExportMethods;
       }
     };
-  }, [currentCanvas, handleExportAsImage, handleExportAsPDF]);
-  
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCanvas, scale, viewportPosition]); // Re-bind if scale/position changes
+
+
   return (
     <div className="flex flex-col h-full dark:bg-zinc-800">
-      <CanvasToolbar 
-        activeTool={activeTool} 
-        setActiveTool={setActiveTool} 
+      <CanvasToolbar
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
         onSave={() => saveCanvas()}
         onImageUpload={handleImageUpload}
         readOnly={readOnly}
@@ -590,56 +619,83 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         activeColor={activeColor}
         setActiveColor={setActiveColor}
       />
-      
-      <div 
-        className="relative flex-grow overflow-hidden"
+
+      <div
+        className="relative flex-grow overflow-hidden cursor-grab active:cursor-grabbing"
         onWheel={handleCanvasWheel}
+        onMouseDown={(e) => { if (e.button === 2) handleCanvasMouseDown(e); }} // Pan start on right mouse down
+        onMouseMove={handleCanvasMouseMove} // Handles both dragging and panning move
+        onMouseUp={(e) => { if (e.button === 2) handleCanvasMouseUp(); }} // Pan end on right mouse up
+        onContextMenu={handleContextMenu} // Prevent default menu
       >
-        <div 
+        <div
           ref={canvasRef}
           className="absolute w-full h-full canvas-background dark:bg-zinc-900"
           style={{
-            width: currentCanvas?.isInfinite ? '100000px' : '100%',
-            height: currentCanvas?.isInfinite ? '100000px' : '100%',
-            transform: `scale(${scale}) translate(${-viewportPosition.x}px, ${-viewportPosition.y}px)`,
+            width: '100000px',
+            height: '100000px',
+            // Apply transform based on viewport position and scale
+            transform: `translate(${-(viewportPosition.x * scale)}px, ${-(viewportPosition.y * scale)}px) scale(${scale})`,
             transformOrigin: '0 0',
-            cursor: isPanning ? 'grabbing' : 'default'
+            cursor: isPanning ? 'grabbing' : (activeTool === 'select' ? 'default' : 'crosshair'),
+            // Center the large div initially (approximate)
+            left: `calc(50% - 50000px * ${scale})`,
+            top: `calc(50% - 50000px * ${scale})`,
+            touchAction: 'none', // Prevent default touch actions like scroll/zoom
           }}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleCanvasMouseMove}
-          onMouseUp={handleCanvasMouseUp}
-          onMouseLeave={handleCanvasMouseUp}
-          onContextMenu={handleContextMenu}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleCanvasMouseUp}
-          // Enable pointer events to capture pressure
-          onPointerDown={handleCanvasMouseDown as any}
-          onPointerMove={handleCanvasMouseMove as any}
-          onPointerUp={handleCanvasMouseUp as any}
-          // Ensure we get pressure data
-          style={{
-            touchAction: 'none',
-            ...canvasRef.current?.style
+          onMouseDown={(e) => { if (e.button !== 2) handleCanvasMouseDown(e); }} // Handle non-panning mouse down
+          onMouseUp={(e) => { if (e.button !== 2) handleCanvasMouseUp(); }} // Handle non-panning mouse up
+          onMouseLeave={handleCanvasMouseUp} // End drawing/dragging if mouse leaves
+          // Touch events
+          onTouchStart={(e) => {
+            if (e.touches.length === 1) {
+              handleTouchStart(e); // Handle single touch start (drawing, selection)
+            } else if (e.touches.length === 2) {
+              // Handle two-finger pan/zoom start
+              e.preventDefault();
+              setIsPanning(true);
+              const t1 = e.touches[0];
+              const t2 = e.touches[1];
+              setPanStartPosition({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
+              // Could also store initial distance for pinch-zoom here
+            }
+          }}
+          onTouchMove={(e) => {
+             if (e.touches.length === 1 && !isPanning) {
+               handleTouchMove(e); // Handle single touch move (drawing, dragging)
+             } else if (e.touches.length === 2 && isPanning) {
+               // Handle two-finger pan/zoom move
+               e.preventDefault();
+               const t1 = e.touches[0];
+               const t2 = e.touches[1];
+               const currentMidX = (t1.clientX + t2.clientX) / 2;
+               const currentMidY = (t1.clientY + t2.clientY) / 2;
+               const deltaX = currentMidX - panStartPosition.x;
+               const deltaY = currentMidY - panStartPosition.y;
+               setViewportPosition(prev => ({ x: prev.x - deltaX / scale, y: prev.y - deltaY / scale }));
+               setPanStartPosition({ x: currentMidX, y: currentMidY });
+               // Could calculate distance change for pinch-zoom here
+            }
+          }}
+          onTouchEnd={(e) => {
+            if (isPanning) setIsPanning(false); // End panning state
+            if (e.touches.length < 2) handleCanvasMouseUp(); // Handle end of single touch (drawing, dragging)
           }}
         >
-          <div ref={contentRef} className="absolute top-0 left-0 w-full h-full">
-            {/* Draw current elements */}
+          {/* Content container for elements and temporary drawing */}
+          <div ref={contentRef} className="absolute top-0 left-0" style={{ width: '100%', height: '100%' }}>
+            {/* Render canvas elements */}
             {currentCanvas?.elements.map(element => (
-              <CanvasElement 
+              <CanvasElement
                 key={element.id}
                 element={element}
                 selected={element.id === selectedElement}
                 onUpdateElement={(updates) => {
                   updateElement(element.id, updates);
-                  
                   if (isConnected) {
                     sendMessage({
                       type: 'updateElement',
-                      payload: {
-                        id: element.id,
-                        updates
-                      },
+                      payload: { id: element.id, updates },
                       canvasId: currentCanvas.id
                     });
                   }
@@ -647,40 +703,30 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                 onDeleteElement={handleDeleteElement}
                 readOnly={readOnly}
                 allElements={currentCanvas.elements}
-                onSelectElement={setSelectedElement}
+                onSelectElement={setSelectedElement} // Pass selection handler
               />
             ))}
+
+            {/* Draw current stroke */}
+            {isDrawing && drawingPoints.length > 1 && (
+              <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                <path
+                  d={drawingPoints.reduce((path, point, i) => {
+                    if (i === 0) return `M ${point.x} ${point.y}`;
+                    return `${path} L ${point.x} ${point.y}`;
+                  }, '')}
+                  fill="none"
+                  stroke={activeColor}
+                  strokeWidth={2 / scale} // Adjust stroke width based on scale
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke" // Keep stroke visually consistent
+                />
+              </svg>
+            )}
           </div>
-          
-          {/* Draw current stroke with pressure sensitivity */}
-          {isDrawing && drawingPoints.length > 1 && (
-            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
-              <path
-                d={drawingPoints.reduce((path, point, i) => {
-                  // Start with a move to the first point
-                  if (i === 0) {
-                    return `M ${point.x} ${point.y}`;
-                  }
-                  // Then draw lines to subsequent points
-                  return `${path} L ${point.x} ${point.y}`;
-                }, '')}
-                fill="none"
-                stroke={activeColor}
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                // Apply varying stroke width based on pressure
-                style={{
-                  // Scale the stroke width by pressure (between 1-5 pixels)
-                  strokeWidth: drawingPoints.map(p => Math.max(1, (p.pressure || 1) * 5)).join(',')
-                }}
-                // Use variable width stroke if supported
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
-          )}
-          
-          {/* Draw arrow connection indicator */}
+
+          {/* Arrow connection indicator */}
           {arrowStart && (
             <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center pointer-events-none z-50">
               <div className="bg-black bg-opacity-70 text-white px-4 py-2 rounded-md">
@@ -690,8 +736,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           )}
         </div>
       </div>
-      
-      {/* Hidden file input for image uploads */}
+
+      {/* Hidden file input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -699,7 +745,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         className="hidden"
         onChange={handleImageUpload}
       />
-      
+
+      {/* Connection status */}
       {isConnected && (
         <div className="fixed bottom-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm animate-pulse-light z-50">
           Live: Connected
