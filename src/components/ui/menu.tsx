@@ -1,3 +1,4 @@
+
 import * as React from "react"
 import * as MenuPrimitive from "@radix-ui/react-menu"
 import { Check, ChevronRight, Circle } from "lucide-react"
@@ -6,7 +7,7 @@ import { cn } from "@/lib/utils"
 
 const Menu = MenuPrimitive.Root
 
-// Fixed Trigger implementation
+// Correct implementation of MenuTrigger
 const MenuTrigger = React.forwardRef<
   React.ElementRef<typeof MenuPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>
