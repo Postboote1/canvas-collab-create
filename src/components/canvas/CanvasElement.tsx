@@ -167,43 +167,45 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const renderControlsMenu = () => {
-    if (!selected || readOnly || element.type === 'drawing') {
+    if (!selected || readOnly) {
       return null;
     }
     
     return (
       <div className="absolute -top-8 right-0 flex items-center gap-1 bg-background/80 backdrop-blur-sm border rounded p-1 shadow-md z-20">
-        <Popover open={showColorPicker} onOpenChange={setShowColorPicker}>
-          <PopoverTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0">
-              <Palette size={14} />
-              <span className="sr-only">Change color</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-3">
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium">Color</p>
-              <div className="grid grid-cols-4 gap-2">
-                {['#FFFFFF', '#F87171', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#000000'].map(color => (
-                  <div
-                    key={color}
-                    className={`w-6 h-6 rounded cursor-pointer border ${element.color === color ? 'ring-2 ring-blue-500' : 'border-gray-300'}`}
-                    style={{ backgroundColor: color }}
-                    onClick={() => handleColorChange(color)}
+        {element.type !== 'drawing' && (
+          <Popover open={showColorPicker} onOpenChange={setShowColorPicker}>
+            <PopoverTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0">
+                <Palette size={14} />
+                <span className="sr-only">Change color</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3">
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium">Color</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {['#FFFFFF', '#F87171', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#000000'].map(color => (
+                    <div
+                      key={color}
+                      className={`w-6 h-6 rounded cursor-pointer border ${element.color === color ? 'ring-2 ring-blue-500' : 'border-gray-300'}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => handleColorChange(color)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2">
+                  <input 
+                    type="color" 
+                    value={element.color || '#FFFFFF'} 
+                    onChange={(e) => handleColorChange(e.target.value)} 
+                    className="w-full h-6" 
                   />
-                ))}
+                </div>
               </div>
-              <div className="mt-2">
-                <input 
-                  type="color" 
-                  value={element.color || '#FFFFFF'} 
-                  onChange={(e) => handleColorChange(e.target.value)} 
-                  className="w-full h-6" 
-                />
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverContent>
+          </Popover>
+        )}
         
         {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
           <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0" onClick={handleResizeStart}>
@@ -462,14 +464,16 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         // Calculate the endpoint with offset to place arrowhead correctly
         const endX = toX - markerOffset * Math.cos(angle);
         const endY = toY - markerOffset * Math.sin(angle);
-        
-        return (
+
+        // Make arrows selectable by wrapping in a context menu
+        return renderContextMenu(
           <svg
-            className="absolute top-0 left-0 w-full h-full pointer-events-none"
+            className={`absolute top-0 left-0 w-full h-full ${selected ? 'cursor-pointer' : ''}`}
             style={{
               left: 0,
               top: 0
             }}
+            onClick={() => !readOnly && setSelectedElement(element.id)}
           >
             {/* Arrow line */}
             <line
@@ -477,7 +481,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               y1={fromY}
               x2={endX}
               y2={endY}
-              stroke={element.color || '#000000'}
+              stroke={element.color || '#000000'} // Default to black if no color specified
               strokeWidth="2"
               markerEnd="url(#arrowhead)"
             />
@@ -494,7 +498,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               >
                 <polygon
                   points="0 0, 10 3.5, 0 7"
-                  fill={element.color || '#000000'}
+                  fill={element.color || '#000000'} // Default to black if no color specified
                 />
               </marker>
             </defs>

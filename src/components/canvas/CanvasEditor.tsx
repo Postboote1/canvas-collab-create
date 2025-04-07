@@ -176,7 +176,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
               y: startElement.y + (startElement.height || 0) / 2,
               fromId: startElement.id,
               toId: element.id,
-              color: activeColor
+              color: '#000000' // Set black color by default for arrows
             };
             
             addElement(newArrow);
