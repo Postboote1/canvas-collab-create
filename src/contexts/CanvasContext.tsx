@@ -1,7 +1,8 @@
-
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { useWebSocket } from './WebSocketContext';
 import { toast } from 'sonner';
+
 
 export interface CanvasElement {
   id: string;
@@ -28,6 +29,7 @@ export interface Canvas {
   createdAt: string;
   joinCode: string;
   isInfinite: boolean;
+  users?: string[];
   viewBox?: { x: number; y: number; width: number; height: number };
 }
 
@@ -50,18 +52,72 @@ interface CanvasContextType {
   importCanvasData: (data: string) => boolean;
   generateJoinCode: () => string;
   generateQRCode: (joinCode: string) => string;
+  setCurrentCanvas: React.Dispatch<React.SetStateAction<Canvas | null>>;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
-
-// Define a global storage key for canvases to ensure they're accessible across sessions/devices
 const CANVAS_STORAGE_KEY = 'global_canvases';
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const { registerHandler, sendMessage } = useWebSocket();
   const [userCanvases, setUserCanvases] = useState<Canvas[]>([]);
   const [currentCanvas, setCurrentCanvas] = useState<Canvas | null>(null);
-  
+  const canvasRef = useRef(currentCanvas);
+
+  // Sync ref with current canvas state
+  useEffect(() => {
+    canvasRef.current = currentCanvas;
+  }, [currentCanvas]);
+
+  // WebSocket message handling
+  useEffect(() => {
+    const handleCanvasUpdate = (payload: any) => {
+      if (!canvasRef.current) return;
+
+      switch (payload.operation) {
+        case 'add':
+          setCurrentCanvas(prev => ({
+            ...prev!,
+            elements: [...prev!.elements, payload.element]
+          }));
+          break;
+        case 'update':
+          setCurrentCanvas(prev => ({
+            ...prev!,
+            elements: prev!.elements.map(el => 
+              el.id === payload.element.id ? { ...el, ...payload.element } : el
+            )
+          }));
+          break;
+        case 'delete':
+          setCurrentCanvas(prev => ({
+            ...prev!,
+            elements: prev!.elements.filter(el => el.id !== payload.elementId)
+          }));
+          break;
+      }
+    };
+
+    registerHandler('canvasOperation', handleCanvasUpdate);
+    registerHandler('canvasState', (payload) => {
+      setCurrentCanvas({
+        id: payload.canvasId,
+        name: 'Collaborative Canvas',
+        elements: payload.elements,
+        createdBy: 'collab',
+        createdAt: new Date().toISOString(),
+        joinCode: payload.joinCode,
+        isInfinite: true
+      });
+    });
+
+    return () => {
+      registerHandler('canvasOperation', () => {});
+      registerHandler('canvasState', () => {});
+    };
+  }, [registerHandler]);
+
   // Load user canvases when user changes
   useEffect(() => {
     if (user) {
@@ -84,11 +140,17 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // New function to save all canvases to global storage
-  const saveAllCanvases = (canvases: Canvas[]) => {
+  const saveAllCanvases = (canvases: Canvas[], newCanvas?: Canvas) => {
     try {
       localStorage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(canvases));
+      if (newCanvas && sendMessage) { // Check if sendMessage exists
+        sendMessage({
+          type: 'createCanvas',
+          payload: newCanvas
+        });
+      }
     } catch (error) {
-      console.error('Failed to save canvases to storage:', error);
+      console.error('Failed to save canvases:', error);
     }
   };
 
@@ -162,7 +224,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Also add to global canvases for sharing
         const allCanvases = getAllCanvases();
         allCanvases.push(newCanvas);
-        saveAllCanvases(allCanvases);
+        saveAllCanvases(allCanvases, newCanvas);
         
         // Update state
         setUserCanvases([...userCanvases, newCanvas]);
@@ -202,7 +264,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Add to global canvases for sharing
     const allCanvases = getAllCanvases();
     allCanvases.push(newCanvas);
-    saveAllCanvases(allCanvases);
+    saveAllCanvases(allCanvases, newCanvas);
     
     // Set as current canvas but don't save to any user account
     setCurrentCanvas(newCanvas);
@@ -437,39 +499,58 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const addElement = (element: Omit<CanvasElement, 'id'>) => {
-    if (!currentCanvas) return;
-    
-    const newElement: CanvasElement = {
+  // Canvas operations with useCallback for stability
+  const addElement = useCallback((element: Omit<CanvasElement, 'id'>) => {
+    const newElement = {
       ...element,
       id: `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     };
     
-    setCurrentCanvas({
-      ...currentCanvas,
-      elements: [...currentCanvas.elements, newElement]
-    });
-  };
-
-  const updateElement = (id: string, updates: Partial<CanvasElement>) => {
-    if (!currentCanvas) return;
+    setCurrentCanvas(prev => prev ? { 
+      ...prev, 
+      elements: [...prev.elements, newElement] 
+    } : prev);
     
-    setCurrentCanvas({
-      ...currentCanvas,
-      elements: currentCanvas.elements.map(element => 
-        element.id === id ? { ...element, ...updates } : element
-      )
+    sendMessage({
+      type: 'canvasOperation',
+      payload: {
+        operation: 'add',
+        element: newElement
+      }
     });
-  };
+  }, [sendMessage]);
 
-  const deleteElement = (id: string) => {
-    if (!currentCanvas) return;
-    
-    setCurrentCanvas({
-      ...currentCanvas,
-      elements: currentCanvas.elements.filter(element => element.id !== id)
+  const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
+    setCurrentCanvas(prev => {
+      if (!prev) return prev;
+      const updated = prev.elements.map(el => 
+        el.id === id ? { ...el, ...updates } : el
+      );
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'update',
+          element: { id, ...updates }
+        }
+      });
+      return { ...prev, elements: updated };
     });
-  };
+  }, [sendMessage]);
+
+  const deleteElement = useCallback((id: string) => {
+    setCurrentCanvas(prev => {
+      if (!prev) return prev;
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'delete',
+          elementId: id
+        }
+      });
+      return { ...prev, elements: prev.elements.filter(el => el.id !== id) };
+    });
+  }, [sendMessage]);
+
 
   const clearCanvas = () => {
     if (!currentCanvas) return;
@@ -667,7 +748,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       exportCanvasData,
       importCanvasData,
       generateJoinCode,
-      generateQRCode
+      generateQRCode,
+      setCurrentCanvas
     }}>
       {children}
     </CanvasContext.Provider>
@@ -676,7 +758,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
 export const useCanvas = () => {
   const context = useContext(CanvasContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useCanvas must be used within a CanvasProvider');
   }
   return context;

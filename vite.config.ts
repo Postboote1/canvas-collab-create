@@ -6,6 +6,12 @@ import { componentTagger } from "lovable-tagger";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
+    proxy: {
+      '/ws': {
+        target: 'ws://localhost:8080',
+        ws: true
+      }
+    },
     host: "::",
     port: 8080,
   },
@@ -19,4 +25,9 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  css: {
+    modules: {
+      localsConvention: 'camelCase'
+    }
+  }
 }));

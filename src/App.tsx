@@ -33,8 +33,8 @@ declare global {
 function App() {
   return (
     <AuthProvider>
-      <CanvasProvider>
-        <WebSocketProvider>
+      <WebSocketProvider>
+        <CanvasProvider>
           <AnalyticsProvider>
             <ThemeProvider>
               <Router>
@@ -54,12 +54,13 @@ function App() {
                   <Route path="/presentation" element={<PresentationMode />} />
                 </Routes>
                 <CookieConsent />
-              </Router>
+                </Router>
+              <CookieConsent />
               <Toaster position="top-right" />
             </ThemeProvider>
           </AnalyticsProvider>
-        </WebSocketProvider>
-      </CanvasProvider>
+        </CanvasProvider>
+      </WebSocketProvider>
     </AuthProvider>
   );
 }

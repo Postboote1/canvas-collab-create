@@ -1,9 +1,17 @@
-
-import React from 'react';
+import React, { useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import CanvasJoin from '@/components/canvas/CanvasJoin';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 
 const JoinPage: React.FC = () => {
+  const { disconnect } = useWebSocket();
+
+  useEffect(() => {
+    return () => {
+      // Cleanup WebSocket connection when leaving page
+      disconnect();
+    };
+  }, [disconnect]);
   return (
     <Layout>
       <div className="max-w-4xl mx-auto my-12 px-4">
