@@ -19,7 +19,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
-  const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]);
+  const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number; pressure?: number }[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [arrowStart, setArrowStart] = useState<string | null>(null);
@@ -149,7 +149,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       setActiveTool('select');
     } else if (activeTool === 'draw') {
       setIsDrawing(true);
-      setDrawingPoints([{ x, y }]);
+      // Get pressure from pointer events if available
+      const pressure = (e.nativeEvent as PointerEvent).pressure !== undefined && 
+                       (e.nativeEvent as PointerEvent).pressure !== 0 ? 
+                       (e.nativeEvent as PointerEvent).pressure : 1;
+      
+      setDrawingPoints([{ x, y, pressure }]);
     } else if (activeTool === 'arrow') {
       // Find element under the cursor
       const element = currentCanvas?.elements.find(el => {
@@ -245,6 +250,29 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
   
+  // Handle touch start for mobile and stylus input
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!canvasRef.current || readOnly) return;
+    
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (touch.clientX - rect.left) / scale + viewportPosition.x;
+    const y = (touch.clientY - rect.top) / scale + viewportPosition.y;
+    
+    if (activeTool === 'draw') {
+      setIsDrawing(true);
+      
+      // Get pressure from touch events if available (for stylus)
+      // Force is equivalent to pressure in the Touch API
+      const pressure = touch.force !== undefined && touch.force !== 0 ? touch.force : 1;
+      
+      setDrawingPoints([{ x, y, pressure }]);
+      e.preventDefault(); // Prevent scrolling while drawing
+    }
+  };
+  
   // Handle mouse move on canvas with improved panning
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
@@ -272,7 +300,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     const y = (e.clientY - rect.top) / scale + viewportPosition.y;
     
     if (isDrawing && activeTool === 'draw') {
-      setDrawingPoints([...drawingPoints, { x, y }]);
+      // Get pressure from pointer events if available
+      const pressure = (e.nativeEvent as PointerEvent).pressure !== undefined && 
+                       (e.nativeEvent as PointerEvent).pressure !== 0 ? 
+                       (e.nativeEvent as PointerEvent).pressure : 1;
+      
+      setDrawingPoints([...drawingPoints, { x, y, pressure }]);
     } else if (isDragging && selectedElement) {
       const element = currentCanvas?.elements.find(el => el.id === selectedElement);
       
@@ -293,6 +326,26 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           });
         }
       }
+    }
+  };
+  
+  // Handle touch move for mobile and stylus input
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!canvasRef.current || readOnly || !isDrawing) return;
+    
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (touch.clientX - rect.left) / scale + viewportPosition.x;
+    const y = (touch.clientY - rect.top) / scale + viewportPosition.y;
+    
+    if (activeTool === 'draw') {
+      // Get pressure from touch events if available (for stylus)
+      const pressure = touch.force !== undefined && touch.force !== 0 ? touch.force : 1;
+      
+      setDrawingPoints([...drawingPoints, { x, y, pressure }]);
+      e.preventDefault(); // Prevent scrolling while drawing
     }
   };
   
@@ -557,28 +610,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
           onContextMenu={handleContextMenu}
-          onTouchStart={(e) => {
-            const touch = e.touches[0];
-            if (touch) {
-              const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-              });
-              handleCanvasMouseDown(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
-            }
-          }}
-          onTouchMove={(e) => {
-            const touch = e.touches[0];
-            if (touch) {
-              const mouseEvent = new MouseEvent('mousemove', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-              });
-              handleCanvasMouseMove(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
-            }
-          }}
-          onTouchEnd={() => {
-            handleCanvasMouseUp();
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleCanvasMouseUp}
+          // Enable pointer events to capture pressure
+          onPointerDown={handleCanvasMouseDown as any}
+          onPointerMove={handleCanvasMouseMove as any}
+          onPointerUp={handleCanvasMouseUp as any}
+          // Ensure we get pressure data
+          style={{
+            touchAction: 'none',
+            ...canvasRef.current?.style
           }}
         >
           <div ref={contentRef} className="absolute top-0 left-0 w-full h-full">
@@ -605,20 +647,35 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                 onDeleteElement={handleDeleteElement}
                 readOnly={readOnly}
                 allElements={currentCanvas.elements}
+                onSelectElement={setSelectedElement}
               />
             ))}
           </div>
           
-          {/* Draw current stroke */}
+          {/* Draw current stroke with pressure sensitivity */}
           {isDrawing && drawingPoints.length > 1 && (
             <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
-              <polyline
-                points={drawingPoints.map(p => `${p.x},${p.y}`).join(' ')}
+              <path
+                d={drawingPoints.reduce((path, point, i) => {
+                  // Start with a move to the first point
+                  if (i === 0) {
+                    return `M ${point.x} ${point.y}`;
+                  }
+                  // Then draw lines to subsequent points
+                  return `${path} L ${point.x} ${point.y}`;
+                }, '')}
                 fill="none"
                 stroke={activeColor}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                // Apply varying stroke width based on pressure
+                style={{
+                  // Scale the stroke width by pressure (between 1-5 pixels)
+                  strokeWidth: drawingPoints.map(p => Math.max(1, (p.pressure || 1) * 5)).join(',')
+                }}
+                // Use variable width stroke if supported
+                vectorEffect="non-scaling-stroke"
               />
             </svg>
           )}

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { CanvasElement as ICanvasElement } from '@/contexts/CanvasContext';
 import { 
@@ -17,6 +18,7 @@ interface CanvasElementProps {
   onDeleteElement?: (id: string) => void;
   readOnly: boolean;
   allElements: ICanvasElement[];
+  onSelectElement: (id: string | null) => void;
 }
 
 const CanvasElement: React.FC<CanvasElementProps> = ({
@@ -25,7 +27,8 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   onUpdateElement,
   onDeleteElement,
   readOnly,
-  allElements
+  allElements,
+  onSelectElement
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -415,13 +418,27 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               top: 0
             }}
           >
-            <polyline
-              points={element.points.map(p => `${p.x},${p.y}`).join(' ')}
+            <path
+              d={element.points.reduce((path, point, i) => {
+                // Start with a move to the first point
+                if (i === 0) {
+                  return `M ${point.x} ${point.y}`;
+                }
+                // Then draw lines to subsequent points
+                return `${path} L ${point.x} ${point.y}`;
+              }, '')}
               fill="none"
               stroke={element.color || '#000000'}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              // Apply varying stroke width based on pressure if available
+              style={{
+                strokeWidth: element.points.some(p => p.pressure !== undefined) 
+                  ? element.points.map(p => Math.max(1, (p.pressure || 1) * 5)).join(',') 
+                  : '2'
+              }}
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
         );
@@ -473,7 +490,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               left: 0,
               top: 0
             }}
-            onClick={() => !readOnly && setSelectedElement(element.id)}
+            onClick={() => !readOnly && onSelectElement(element.id)}
           >
             {/* Arrow line */}
             <line
