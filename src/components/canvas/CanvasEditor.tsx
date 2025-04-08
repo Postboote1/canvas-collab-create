@@ -20,7 +20,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
-  const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); // Removed pressure
+  const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
   const [isDrawing, setIsDrawing] = useState(false);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [arrowStart, setArrowStart] = useState<string | null>(null);
@@ -37,14 +37,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   // Connect to WebSocket when canvas changes
   useEffect(() => {
-    if (currentCanvas && user) {
-      connect(currentCanvas.id);
+    if (currentCanvas && currentCanvas.joinCode) {
+      console.log("Connecting to canvas with join code:", currentCanvas.joinCode);
+      connect(currentCanvas.joinCode);
 
       return () => {
         disconnect();
       };
     }
-  }, [currentCanvas, user, connect, disconnect]);
+  }, [currentCanvas, connect, disconnect]);
 
   // Auto-save every 30 seconds
   useEffect(() => {
@@ -117,8 +118,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
       if (isConnected) {
         sendMessage({
-          type: 'addElement',
-          payload: newCard,
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newCard
+          }
         });
       }
 
@@ -141,8 +145,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
       if (isConnected) {
         sendMessage({
-          type: 'addElement',
-          payload: newText,
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newText
+          }
         });
       }
 
@@ -184,8 +191,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
             if (isConnected) {
               sendMessage({
-                type: 'addElement',
-                payload: newArrow,
+                type: 'canvasOperation',
+                payload: {
+                  operation: 'add',
+                  element: newArrow
+                }
               });
             }
 
@@ -238,8 +248,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
       if (isConnected) {
         sendMessage({
-          type: 'addElement',
-          payload: newShape,
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newShape
+          }
         });
       }
 
@@ -349,7 +362,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
 
-  // Handle mouse up on canvas
   const handleCanvasMouseUp = () => {
     if (readOnly) return;
 
@@ -374,8 +386,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
       if (isConnected) {
         sendMessage({
-          type: 'addElement',
-          payload: newDrawing,
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newDrawing
+          }
         });
       }
 
@@ -435,13 +450,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   };
 
   const handleUpdateElement = (id: string, updates: Partial<CanvasElementType>) => {
-    sendMessage({
-      type: 'canvasOperation',
-      payload: {
-        operation: 'update',
-        element: { id, ...updates }
-      }
-    });
+    if (isConnected) {
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'update',
+          element: { id, ...updates }
+        }
+      });
+    }
   };
 
   // Handle element deletion
@@ -456,7 +473,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         type: 'canvasOperation',
         payload: {
           operation: 'delete',
-          element: { id }
+          elementId: id
         }
       });
     }
@@ -467,7 +484,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
 
-  // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !canvasRef.current || readOnly) return;
 
@@ -498,8 +514,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
       if (isConnected) {
         sendMessage({
-          type: 'addElement',
-          payload: newImage,
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newImage
+          }
         });
       }
 
@@ -510,7 +529,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     e.target.value = ''; // Clear input
   };
 
-  // --- Export Functions ---
   const handleExportAsImage = () => {
     if (!contentRef.current) {
       toast.error('Canvas content not ready for export');
@@ -693,12 +711,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                 selected={element.id === selectedElement}
                 onUpdateElement={(updates) => {
                   updateElement(element.id, updates);
-                  if (isConnected) {
-                    sendMessage({
-                      type: 'updateElement',
-                      payload: { id: element.id, updates },
-                    });
-                  }
+                  handleUpdateElement(element.id, updates);
                 }}
                 onDeleteElement={handleDeleteElement}
                 readOnly={readOnly}

@@ -33,8 +33,8 @@ const CanvasJoin: React.FC = () => {
   };
   
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">Join a Canvas</h2>
+    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md dark:bg-zinc-800 dark:border dark:border-zinc-700">
+      <h2 className="text-2xl font-bold mb-6 text-center dark:text-white">Join a Canvas</h2>
       <form onSubmit={handleJoinCanvas}>
         <div className="mb-4">
           <Input
