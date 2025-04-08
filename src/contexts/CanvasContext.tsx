@@ -3,7 +3,6 @@ import { useAuth } from './AuthContext';
 import { useWebSocket } from './WebSocketContext';
 import { toast } from 'sonner';
 
-
 export interface CanvasElement {
   id: string;
   type: 'card' | 'text' | 'drawing' | 'image' | 'arrow' | 'shape';
@@ -99,8 +98,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    registerHandler('canvasOperation', handleCanvasUpdate);
-    registerHandler('canvasState', (payload) => {
+    const unregisterCanvasOperation = registerHandler('canvasOperation', handleCanvasUpdate);
+    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
       setCurrentCanvas({
         id: payload.canvasId,
         name: 'Collaborative Canvas',
@@ -113,8 +112,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return () => {
-      registerHandler('canvasOperation', () => {});
-      registerHandler('canvasState', () => {});
+      unregisterCanvasOperation();
+      unregisterCanvasState();
     };
   }, [registerHandler]);
 
@@ -550,7 +549,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { ...prev, elements: prev.elements.filter(el => el.id !== id) };
     });
   }, [sendMessage]);
-
 
   const clearCanvas = () => {
     if (!currentCanvas) return;

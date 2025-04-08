@@ -16,7 +16,6 @@ import { AuthProvider } from './contexts/AuthContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { AnalyticsProvider } from './contexts/AnalyticsContext';
 import { Toaster } from '@/components/ui/sonner';
-import CookieConsent from './components/common/CookieConsent';
 import PresentationMode from './components/canvas/PresentationMode';
 import { ThemeProvider } from './contexts/ThemeContext';
 
@@ -53,9 +52,7 @@ function App() {
                   <Route path="/canvas" element={<CanvasPage />} />
                   <Route path="/presentation" element={<PresentationMode />} />
                 </Routes>
-                <CookieConsent />
-                </Router>
-              <CookieConsent />
+              </Router>
               <Toaster position="top-right" />
             </ThemeProvider>
           </AnalyticsProvider>

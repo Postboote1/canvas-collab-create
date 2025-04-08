@@ -1,18 +1,25 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import Peer, { DataConnection } from 'peerjs';
-import { useCanvas } from './CanvasContext';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 
 // Types
-type WebSocketContextType = {
+type MessageHandler = (data: any) => void;
+
+interface Message {
+  type: string;
+  payload: any;
+}
+
+export type WebSocketContextType = {
   connect: (joinCode: string) => void;
   disconnect: () => void;
+  sendMessage: (message: Message) => void;
+  registerHandler: (type: string, handler: MessageHandler) => void;
   peerId: string | null;
   isConnected: boolean;
   isPeerInitialized: boolean;
-  sendCanvasUpdate: (data: any) => void;
   connections: DataConnection[];
 };
 
@@ -23,7 +30,7 @@ type WebSocketProviderProps = {
 // Create context
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
 
-// Get peer server URL based on environment
+// Get peer server config based on environment
 const getPeerServerConfig = () => {
   // In production, use the same host but with the /peerjs path
   if (import.meta.env.PROD) {
@@ -54,8 +61,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [isConnected, setIsConnected] = useState(false);
   const [isPeerInitialized, setIsPeerInitialized] = useState(false);
   const [connections, setConnections] = useState<DataConnection[]>([]);
+  const [messageHandlers, setMessageHandlers] = useState<Record<string, MessageHandler[]>>({});
   
-  const { setCanvasData, canvasData, currentCanvas } = useCanvas();
   const { user } = useAuth();
   
   // Initialize peer
@@ -103,27 +110,47 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     };
   }, []);
   
+  // Handle messages by type
+  const handleMessage = useCallback((type: string, payload: any) => {
+    if (messageHandlers[type]) {
+      messageHandlers[type].forEach(handler => handler(payload));
+    }
+  }, [messageHandlers]);
+  
+  // Register a handler for a specific message type
+  const registerHandler = useCallback((type: string, handler: MessageHandler) => {
+    setMessageHandlers(prev => {
+      const handlers = prev[type] || [];
+      return {
+        ...prev,
+        [type]: [...handlers.filter(h => h !== handler), handler]
+      };
+    });
+    
+    // Return a function to unregister
+    return () => {
+      setMessageHandlers(prev => {
+        const handlers = prev[type] || [];
+        return {
+          ...prev,
+          [type]: handlers.filter(h => h !== handler)
+        };
+      });
+    };
+  }, []);
+  
   // Configure new connection
   const setupConnection = useCallback((conn: DataConnection) => {
     conn.on('open', () => {
       console.log('Connection established with', conn.peer);
       setConnections(prev => [...prev.filter(c => c.peer !== conn.peer), conn]);
-      
-      // Send current canvas data when a new peer connects
-      if (canvasData && Object.keys(canvasData).length > 0) {
-        conn.send({
-          type: 'full_canvas',
-          data: canvasData
-        });
-      }
+      setIsConnected(true);
     });
     
     conn.on('data', (data: any) => {
       console.log('Received data:', data);
-      if (data.type === 'canvas_update') {
-        setCanvasData(data.data);
-      } else if (data.type === 'full_canvas') {
-        setCanvasData(data.data);
+      if (data.type) {
+        handleMessage(data.type, data.payload);
       }
     });
     
@@ -131,13 +158,21 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       console.log('Connection closed with', conn.peer);
       setConnections(prev => prev.filter(c => c.peer !== conn.peer));
       toast.info(`Peer ${conn.peer} disconnected`);
+      
+      // If no more connections, set isConnected to false
+      setConnections(prev => {
+        if (prev.length === 0) {
+          setIsConnected(false);
+        }
+        return prev;
+      });
     });
     
     conn.on('error', (err) => {
       console.error('Connection error:', err);
       toast.error(`Connection error with peer ${conn.peer}`);
     });
-  }, [canvasData, setCanvasData]);
+  }, [handleMessage]);
   
   // Connect to another peer
   const connect = useCallback((joinCode: string) => {
@@ -147,7 +182,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       console.log('Connecting to peer:', joinCode);
       const conn = peer.connect(joinCode);
       setupConnection(conn);
-      setIsConnected(true);
       toast.success(`Connected to canvas with peer ID: ${joinCode}`);
     } catch (error) {
       console.error('Failed to connect to peer:', error);
@@ -163,20 +197,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     toast.info('Disconnected from all peers');
   }, [connections]);
   
-  // Send canvas updates to all connected peers
-  const sendCanvasUpdate = useCallback((data: any) => {
+  // Send message to all connected peers
+  const sendMessage = useCallback((message: Message) => {
     if (connections.length === 0) return;
     
-    const updateData = {
-      type: 'canvas_update',
-      data: data,
-      sender: peerId,
-      timestamp: Date.now()
-    };
+    console.log('Sending message to all peers:', message);
     
     connections.forEach(conn => {
       if (conn.open) {
-        conn.send(updateData);
+        conn.send({
+          ...message,
+          sender: peerId,
+          timestamp: Date.now()
+        });
       }
     });
   }, [connections, peerId]);
@@ -185,10 +218,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const value = {
     connect,
     disconnect,
+    sendMessage,
+    registerHandler,
     peerId,
     isConnected,
     isPeerInitialized,
-    sendCanvasUpdate,
     connections
   };
   
