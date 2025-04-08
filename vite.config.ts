@@ -8,8 +8,8 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     proxy: {
-      '/ws': {
-        target: 'ws://localhost:8080',
+      '/peerjs': {
+        target: 'http://localhost:9001',
         ws: true,
         changeOrigin: true
       }

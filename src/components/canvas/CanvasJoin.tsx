@@ -9,14 +9,19 @@ import { toast } from 'sonner';
 const CanvasJoin: React.FC = () => {
   const [joinCode, setJoinCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { connect } = useWebSocket();
+  const { connect, isPeerInitialized } = useWebSocket();
   const navigate = useNavigate();
   
   const handleJoinCanvas = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!joinCode.trim()) {
-      toast.error('Please enter a join code');
+      toast.error('Please enter a peer ID');
+      return;
+    }
+    
+    if (!isPeerInitialized) {
+      toast.error('Peer connection not initialized yet. Please try again in a moment.');
       return;
     }
     
@@ -38,16 +43,25 @@ const CanvasJoin: React.FC = () => {
       <form onSubmit={handleJoinCanvas}>
         <div className="mb-4">
           <Input
-            placeholder="Enter 6-digit join code"
+            placeholder="Enter peer ID to join"
             value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            maxLength={6}
-            className="text-center text-xl uppercase"
+            onChange={(e) => setJoinCode(e.target.value)}
+            className="text-center text-xl"
           />
         </div>
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button 
+          type="submit" 
+          className="w-full" 
+          disabled={isLoading || !isPeerInitialized}
+        >
           {isLoading ? 'Joining...' : 'Join Canvas'}
         </Button>
+        
+        {!isPeerInitialized && (
+          <p className="text-sm text-orange-500 mt-2 text-center">
+            Initializing peer connection...
+          </p>
+        )}
       </form>
     </div>
   );

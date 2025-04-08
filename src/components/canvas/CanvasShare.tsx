@@ -1,127 +1,73 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { useCanvas } from '@/contexts/CanvasContext';
+import { Share, Copy, CheckCircle } from 'lucide-react';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 import { toast } from 'sonner';
-import { QrCode, Copy, Share2 } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 
-interface CanvasShareProps {
-  className?: string;
-}
-
-const CanvasShare: React.FC<CanvasShareProps> = ({ className }) => {
-  const { currentCanvas, generateQRCode } = useCanvas();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+const CanvasShare: React.FC = () => {
+  const [copied, setCopied] = useState(false);
+  const { peerId } = useWebSocket();
   
-  if (!currentCanvas) return null;
-  
-  const shareUrl = `${window.location.origin}/join/${currentCanvas.joinCode}`;
-  const qrCodeUrl = generateQRCode(currentCanvas.joinCode);
-  
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-      .then(() => toast.success('Copied to clipboard!'))
-      .catch(() => toast.error('Failed to copy to clipboard'));
-  };
-  
-  const shareCanvas = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: `Join Canvas: ${currentCanvas.name}`,
-        text: `Join my canvas "${currentCanvas.name}" on CanvasCollab!`,
-        url: shareUrl,
-      })
-        .then(() => toast.success('Shared successfully!'))
-        .catch((error) => {
-          console.error('Error sharing:', error);
-          toast.error('Failed to share');
-        });
-    } else {
-      copyToClipboard(shareUrl);
+  const copyPeerId = () => {
+    if (peerId) {
+      navigator.clipboard.writeText(peerId);
+      setCopied(true);
+      toast.success('Peer ID copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
     }
   };
   
   return (
-    <div className={className}>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogTrigger asChild>
-          <Button variant="default" className="flex items-center gap-2">
-            <Share2 size={16} />
-            Share Canvas
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Share Canvas</DialogTitle>
-          </DialogHeader>
-          
-          <div className="grid gap-4 py-4">
-            <div className="flex flex-col items-center justify-center gap-4">
-              <img
-                src={qrCodeUrl}
-                alt="QR Code"
-                className="w-44 h-44 border rounded-md"
-              />
-              <p className="text-sm text-gray-500">Scan to join canvas</p>
-            </div>
-            
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-1 bg-green-500 text-white hover:bg-green-600"
+        >
+          <Share size={16} />
+          Share
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Share Canvas</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">
+              Your Peer ID (Share this with others to let them join)
+            </label>
             <div className="flex items-center gap-2">
-              <div className="grid flex-1 gap-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium" htmlFor="join-code">
-                    Join Code:
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <span className="text-lg font-bold">{currentCanvas.joinCode}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => copyToClipboard(currentCanvas.joinCode)}
-                    >
-                      <Copy size={14} />
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="share-link"
-                    value={shareUrl}
-                    readOnly
-                    className="h-9"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="px-3"
-                    onClick={() => copyToClipboard(shareUrl)}
-                  >
-                    <span className="sr-only">Copy</span>
-                    <Copy size={16} />
-                  </Button>
-                </div>
-              </div>
+              <Input
+                value={peerId || 'Initializing...'}
+                readOnly
+                className="font-mono"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={copyPeerId}
+                disabled={!peerId}
+              >
+                {copied ? <CheckCircle size={18} className="text-green-500" /> : <Copy size={18} />}
+              </Button>
             </div>
           </div>
           
-          <div className="flex justify-end">
-            <Button onClick={shareCanvas}>
-              <Share2 size={16} className="mr-2" />
-              Share
-            </Button>
+          <div className="text-sm text-muted-foreground">
+            <p>
+              Share this Peer ID with others to collaborate on this canvas in real-time.
+              They'll need to enter this ID in the "Join Canvas" page.
+            </p>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
