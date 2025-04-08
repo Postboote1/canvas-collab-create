@@ -98,6 +98,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
+    // Use the return value from registerHandler directly
     const unregisterCanvasOperation = registerHandler('canvasOperation', handleCanvasUpdate);
     const unregisterCanvasState = registerHandler('canvasState', (payload) => {
       setCurrentCanvas({
@@ -120,6 +121,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
   }, [registerHandler]);
+  
   // Load user canvases when user changes
   useEffect(() => {
     if (user) {

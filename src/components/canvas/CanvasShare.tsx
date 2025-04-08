@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 
 const CanvasShare: React.FC = () => {
   const [copied, setCopied] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { peerId, isPeerInitialized } = useWebSocket();
   
   const copyPeerId = () => {
@@ -20,7 +22,7 @@ const CanvasShare: React.FC = () => {
   };
   
   return (
-    <Dialog>
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
         <Button
           variant="outline"

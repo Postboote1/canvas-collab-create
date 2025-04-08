@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 const CanvasJoin: React.FC = () => {
   const [joinCode, setJoinCode] = useState('');
@@ -70,7 +72,14 @@ const CanvasJoin: React.FC = () => {
           className="w-full" 
           disabled={isLoading || !isPeerInitialized}
         >
-          {isLoading ? 'Connecting...' : 'Join Canvas'}
+          {isLoading ? (
+            <span className="flex items-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Connecting...
+            </span>
+          ) : (
+            'Join Canvas'
+          )}
         </Button>
         
         {!isPeerInitialized && (

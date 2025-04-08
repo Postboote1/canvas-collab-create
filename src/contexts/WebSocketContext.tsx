@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { useAuth } from './AuthContext';
@@ -64,6 +65,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [connections, setConnections] = useState<DataConnection[]>([]);
   const [messageHandlers, setMessageHandlers] = useState<Record<string, MessageHandler[]>>({});
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [destroyedPeer, setDestroyedPeer] = useState(false);
   
   const { user } = useAuth();
   
@@ -72,6 +74,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     let reconnectTimer: number | undefined;
     
     const initPeer = () => {
+      // If peer was destroyed, create a completely new instance
+      if (peer && !destroyedPeer) {
+        peer.destroy();
+      }
+      
       try {
         console.log('Initializing peer with config:', getPeerServerConfig());
         const newPeer = new Peer(undefined, getPeerServerConfig());
@@ -81,6 +88,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           setPeerId(id);
           setIsPeerInitialized(true);
           setReconnectAttempts(0);
+          setDestroyedPeer(false);
           toast.success(`Connected to peer network with ID: ${id.substring(0, 6)}...`);
         });
         
@@ -103,10 +111,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
               const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
               console.log(`Attempting to reconnect in ${delay}ms`);
               
+              if (reconnectTimer) {
+                window.clearTimeout(reconnectTimer);
+              }
+              
               reconnectTimer = window.setTimeout(() => {
                 setReconnectAttempts(prev => prev + 1);
                 if (newPeer) {
                   newPeer.destroy();
+                  setDestroyedPeer(true);
                 }
                 initPeer();
               }, delay);
@@ -125,7 +138,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       }
     };
     
-    if (!peer) {
+    if (!peer || destroyedPeer) {
       initPeer();
     }
     
@@ -136,13 +149,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         setPeerId(null);
         setIsPeerInitialized(false);
         setConnections([]);
+        setDestroyedPeer(true);
       }
       
       if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
+        window.clearTimeout(reconnectTimer);
       }
     };
-  }, [reconnectAttempts]);
+  }, [peer, reconnectAttempts, destroyedPeer]);
   
   // Handle messages by type
   const handleMessage = useCallback((type: string, payload: any) => {
@@ -292,7 +306,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   }, [connections, peerId]);
   
   // Context value
-  const value = {
+  const value: WebSocketContextType = {
     connect,
     disconnect,
     sendMessage,
