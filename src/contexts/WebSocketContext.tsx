@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { useAuth } from './AuthContext';
@@ -16,7 +15,7 @@ export type WebSocketContextType = {
   connect: (joinCode: string) => void;
   disconnect: () => void;
   sendMessage: (message: Message) => void;
-  registerHandler: (type: string, handler: MessageHandler) => void;
+  registerHandler: (type: string, handler: MessageHandler) => () => void;
   peerId: string | null;
   isConnected: boolean;
   isPeerInitialized: boolean;
@@ -42,7 +41,8 @@ const getPeerServerConfig = () => {
       host: host,
       port: port ? parseInt(port) : (protocol === 'https' ? 443 : 80),
       path: '/peerjs',
-      secure: protocol === 'https'
+      secure: protocol === 'https',
+      debug: 3
     };
   }
   
@@ -50,7 +50,8 @@ const getPeerServerConfig = () => {
   return {
     host: 'localhost',
     port: 9001,
-    path: '/peerjs'
+    path: '/peerjs',
+    debug: 3
   };
 };
 
@@ -62,20 +63,25 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [isPeerInitialized, setIsPeerInitialized] = useState(false);
   const [connections, setConnections] = useState<DataConnection[]>([]);
   const [messageHandlers, setMessageHandlers] = useState<Record<string, MessageHandler[]>>({});
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   
   const { user } = useAuth();
   
   // Initialize peer
   useEffect(() => {
+    let reconnectTimer: number | undefined;
+    
     const initPeer = () => {
       try {
+        console.log('Initializing peer with config:', getPeerServerConfig());
         const newPeer = new Peer(undefined, getPeerServerConfig());
         
         newPeer.on('open', (id) => {
           console.log('My peer ID is:', id);
           setPeerId(id);
           setIsPeerInitialized(true);
-          toast.success(`Connected to peer network with ID: ${id}`);
+          setReconnectAttempts(0);
+          toast.success(`Connected to peer network with ID: ${id.substring(0, 6)}...`);
         });
         
         newPeer.on('connection', (conn) => {
@@ -85,7 +91,31 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         
         newPeer.on('error', (err) => {
           console.error('Peer connection error:', err);
-          toast.error(`Connection error: ${err.message}`);
+          
+          // If disconnected, try to reconnect
+          if (err.type === 'disconnected' || err.type === 'network') {
+            toast.error(`Connection error: ${err.message}. Attempting to reconnect...`);
+            setPeerId(null);
+            setIsPeerInitialized(false);
+            
+            // Try to reconnect with exponential backoff
+            if (reconnectAttempts < 5) {
+              const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+              console.log(`Attempting to reconnect in ${delay}ms`);
+              
+              reconnectTimer = window.setTimeout(() => {
+                setReconnectAttempts(prev => prev + 1);
+                if (newPeer) {
+                  newPeer.destroy();
+                }
+                initPeer();
+              }, delay);
+            } else {
+              toast.error('Failed to connect after multiple attempts. Please try again later.');
+            }
+          } else {
+            toast.error(`Connection error: ${err.message}`);
+          }
         });
         
         setPeer(newPeer);
@@ -107,8 +137,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         setIsPeerInitialized(false);
         setConnections([]);
       }
+      
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
     };
-  }, []);
+  }, [reconnectAttempts]);
   
   // Handle messages by type
   const handleMessage = useCallback((type: string, payload: any) => {
@@ -141,15 +175,21 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   
   // Configure new connection
   const setupConnection = useCallback((conn: DataConnection) => {
+    if (!conn) {
+      console.error('Connection is null or undefined');
+      return;
+    }
+    
     conn.on('open', () => {
       console.log('Connection established with', conn.peer);
       setConnections(prev => [...prev.filter(c => c.peer !== conn.peer), conn]);
       setIsConnected(true);
+      toast.success(`Connected to peer: ${conn.peer.substring(0, 6)}...`);
     });
     
     conn.on('data', (data: any) => {
       console.log('Received data:', data);
-      if (data.type) {
+      if (data && data.type) {
         handleMessage(data.type, data.payload);
       }
     });
@@ -157,7 +197,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     conn.on('close', () => {
       console.log('Connection closed with', conn.peer);
       setConnections(prev => prev.filter(c => c.peer !== conn.peer));
-      toast.info(`Peer ${conn.peer} disconnected`);
+      toast.info(`Peer ${conn.peer.substring(0, 6)}... disconnected`);
       
       // If no more connections, set isConnected to false
       setConnections(prev => {
@@ -170,28 +210,61 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     
     conn.on('error', (err) => {
       console.error('Connection error:', err);
-      toast.error(`Connection error with peer ${conn.peer}`);
+      toast.error(`Connection error with peer ${conn.peer.substring(0, 6)}...`);
     });
   }, [handleMessage]);
   
   // Connect to another peer
   const connect = useCallback((joinCode: string) => {
-    if (!peer || !joinCode) return;
+    if (!peer || !joinCode) {
+      console.error('Cannot connect: peer or joinCode is missing', { peer, joinCode });
+      toast.error('Cannot connect: connection not initialized');
+      return;
+    }
     
     try {
       console.log('Connecting to peer:', joinCode);
-      const conn = peer.connect(joinCode);
-      setupConnection(conn);
-      toast.success(`Connected to canvas with peer ID: ${joinCode}`);
+      const conn = peer.connect(joinCode, { reliable: true });
+      
+      if (!conn) {
+        console.error('Failed to create connection');
+        toast.error('Failed to connect to canvas');
+        return;
+      }
+      
+      // Add timeout for connection
+      const connectionTimeout = setTimeout(() => {
+        if (!isConnected) {
+          console.error('Connection timeout');
+          toast.error('Connection timeout. Please try again.');
+        }
+      }, 10000);
+      
+      conn.on('open', () => {
+        clearTimeout(connectionTimeout);
+        setupConnection(conn);
+      });
+      
+      conn.on('error', (err) => {
+        clearTimeout(connectionTimeout);
+        console.error('Connection error:', err);
+        toast.error('Failed to connect to canvas');
+      });
+      
+      toast.success(`Connecting to canvas with peer ID: ${joinCode.substring(0, 6)}...`);
     } catch (error) {
       console.error('Failed to connect to peer:', error);
       toast.error('Failed to connect to canvas');
     }
-  }, [peer, setupConnection]);
+  }, [peer, setupConnection, isConnected]);
   
   // Disconnect from peers
   const disconnect = useCallback(() => {
-    connections.forEach(conn => conn.close());
+    connections.forEach(conn => {
+      if (conn && conn.close) {
+        conn.close();
+      }
+    });
     setConnections([]);
     setIsConnected(false);
     toast.info('Disconnected from all peers');
@@ -204,12 +277,16 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     console.log('Sending message to all peers:', message);
     
     connections.forEach(conn => {
-      if (conn.open) {
-        conn.send({
-          ...message,
-          sender: peerId,
-          timestamp: Date.now()
-        });
+      if (conn && conn.open) {
+        try {
+          conn.send({
+            ...message,
+            sender: peerId,
+            timestamp: Date.now()
+          });
+        } catch (error) {
+          console.error('Error sending message to peer:', error);
+        }
       }
     });
   }, [connections, peerId]);

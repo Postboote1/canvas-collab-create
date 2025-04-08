@@ -112,11 +112,14 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return () => {
-      unregisterCanvasOperation();
-      unregisterCanvasState();
+      if (typeof unregisterCanvasOperation === 'function') {
+        unregisterCanvasOperation();
+      }
+      if (typeof unregisterCanvasState === 'function') {
+        unregisterCanvasState();
+      }
     };
   }, [registerHandler]);
-
   // Load user canvases when user changes
   useEffect(() => {
     if (user) {
@@ -510,13 +513,15 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       elements: [...prev.elements, newElement] 
     } : prev);
     
-    sendMessage({
-      type: 'canvasOperation',
-      payload: {
-        operation: 'add',
-        element: newElement
-      }
-    });
+    if (sendMessage) {
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'add',
+          element: newElement
+        }
+      });
+    }
   }, [sendMessage]);
 
   const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
@@ -525,13 +530,15 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const updated = prev.elements.map(el => 
         el.id === id ? { ...el, ...updates } : el
       );
-      sendMessage({
-        type: 'canvasOperation',
-        payload: {
-          operation: 'update',
-          element: { id, ...updates }
-        }
-      });
+      if (sendMessage) {
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'update',
+            element: { id, ...updates }
+          }
+        });
+      }
       return { ...prev, elements: updated };
     });
   }, [sendMessage]);
@@ -539,13 +546,15 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const deleteElement = useCallback((id: string) => {
     setCurrentCanvas(prev => {
       if (!prev) return prev;
-      sendMessage({
-        type: 'canvasOperation',
-        payload: {
-          operation: 'delete',
-          elementId: id
-        }
-      });
+      if (sendMessage) {
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'delete',
+            elementId: id
+          }
+        });
+      }
       return { ...prev, elements: prev.elements.filter(el => el.id !== id) };
     });
   }, [sendMessage]);

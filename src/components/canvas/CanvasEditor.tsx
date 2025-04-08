@@ -17,7 +17,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
   const { isConnected, connect, disconnect, sendMessage } = useWebSocket();
-
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -36,12 +35,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Connect to WebSocket when canvas changes
+  // Connect to WebSocket when canvas changes
   useEffect(() => {
     if (currentCanvas && currentCanvas.joinCode) {
       console.log("Connecting to canvas with join code:", currentCanvas.joinCode);
       connect(currentCanvas.joinCode);
+      
+      // Save current canvas to localStorage for new peers
+      localStorage.setItem('currentCanvas', JSON.stringify(currentCanvas));
 
       return () => {
+        localStorage.removeItem('currentCanvas');
         disconnect();
       };
     }
@@ -450,7 +454,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   };
 
   const handleUpdateElement = (id: string, updates: Partial<CanvasElementType>) => {
-    if (isConnected) {
+    if (isConnected && sendMessage) {
       sendMessage({
         type: 'canvasOperation',
         payload: {
@@ -468,7 +472,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       position: 'bottom-center',
     });
 
-    if (isConnected) {
+    if (isConnected && sendMessage) {
       sendMessage({
         type: 'canvasOperation',
         payload: {

@@ -1,8 +1,11 @@
+import { PeerServer } from 'peer';
+import express from 'express';
+import path from 'path';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
 
-const { PeerServer } = require('peer');
-const express = require('express');
-const path = require('path');
-const cors = require('cors');
+// Get the directory name of the current module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 9000;

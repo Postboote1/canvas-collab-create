@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,8 +8,16 @@ import { toast } from 'sonner';
 const CanvasJoin: React.FC = () => {
   const [joinCode, setJoinCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { connect, isPeerInitialized } = useWebSocket();
+  const { connect, isPeerInitialized, isConnected } = useWebSocket();
   const navigate = useNavigate();
+  
+  // If connection is established, navigate to canvas
+  useEffect(() => {
+    if (isConnected && isLoading) {
+      setIsLoading(false);
+      navigate('/canvas');
+    }
+  }, [isConnected, isLoading, navigate]);
   
   const handleJoinCanvas = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,11 +35,20 @@ const CanvasJoin: React.FC = () => {
     setIsLoading(true);
     try {
       connect(joinCode.trim());
-      navigate('/canvas');
+      
+      // We don't immediately navigate - we wait for the connection to be established first
+      // See the useEffect above
+      
+      // Set a timeout to give up if connection takes too long
+      setTimeout(() => {
+        if (isLoading) {
+          setIsLoading(false);
+          toast.error('Connection is taking too long. Please try again.');
+        }
+      }, 15000);
     } catch (error) {
       console.error('Error joining canvas:', error);
       toast.error('Failed to join canvas');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -54,7 +70,7 @@ const CanvasJoin: React.FC = () => {
           className="w-full" 
           disabled={isLoading || !isPeerInitialized}
         >
-          {isLoading ? 'Joining...' : 'Join Canvas'}
+          {isLoading ? 'Connecting...' : 'Join Canvas'}
         </Button>
         
         {!isPeerInitialized && (

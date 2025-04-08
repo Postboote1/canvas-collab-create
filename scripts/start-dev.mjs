@@ -1,6 +1,9 @@
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
-const { spawn } = require('child_process');
-const path = require('path');
+// Get the directory name of the current module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Start vite dev server
 const viteProcess = spawn('npm', ['run', 'dev'], {
@@ -9,7 +12,7 @@ const viteProcess = spawn('npm', ['run', 'dev'], {
 });
 
 // Start PeerJS server
-const peerProcess = spawn('node', ['server.js'], {
+const peerProcess = spawn('node', ['server.mjs'], {
   stdio: 'inherit',
   shell: true
 });

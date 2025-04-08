@@ -1,15 +1,14 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Share, Copy, CheckCircle } from 'lucide-react';
+import { Share, Copy, CheckCircle, Loader2 } from 'lucide-react';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { toast } from 'sonner';
 
 const CanvasShare: React.FC = () => {
   const [copied, setCopied] = useState(false);
-  const { peerId } = useWebSocket();
+  const { peerId, isPeerInitialized } = useWebSocket();
   
   const copyPeerId = () => {
     if (peerId) {
@@ -27,9 +26,19 @@ const CanvasShare: React.FC = () => {
           variant="outline"
           size="sm"
           className="flex items-center gap-1 bg-green-500 text-white hover:bg-green-600"
+          disabled={!isPeerInitialized}
         >
-          <Share size={16} />
-          Share
+          {isPeerInitialized ? (
+            <>
+              <Share size={16} />
+              Share
+            </>
+          ) : (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Initializing...
+            </>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -43,7 +52,7 @@ const CanvasShare: React.FC = () => {
             </label>
             <div className="flex items-center gap-2">
               <Input
-                value={peerId || 'Initializing...'}
+                value={isPeerInitialized ? (peerId || 'Error getting ID') : 'Initializing...'}
                 readOnly
                 className="font-mono"
               />
@@ -64,6 +73,11 @@ const CanvasShare: React.FC = () => {
               Share this Peer ID with others to collaborate on this canvas in real-time.
               They'll need to enter this ID in the "Join Canvas" page.
             </p>
+            {!isPeerInitialized && (
+              <p className="mt-2 text-orange-500">
+                Still initializing peer connection. Please wait a moment...
+              </p>
+            )}
           </div>
         </div>
       </DialogContent>
