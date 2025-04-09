@@ -85,3 +85,6 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 9. Admin Page with admin login for me with statistics
 10. Different roles (viewer, editor)
 11. Improve Arrow creation currently sometimes gets stuck
+12. Item for card is missleading
+13. No rectangle objekt
+14. Notification on canvas only at the bottom not at the top
