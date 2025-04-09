@@ -1,30 +1,37 @@
-
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef, useMemo } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
+import { useCanvas } from './CanvasContext';
 
 // Types
-type MessageHandler = (data: any) => void;
+interface MessageHandler {
+  (payload: any): void;
+}
+
+interface MessageHandlers {
+  [key: string]: MessageHandler[];
+}
 
 interface Message {
   type: string;
   payload: any;
 }
 
-export type WebSocketContextType = {
-  connect: (joinCode: string) => void;
-  disconnect: () => void;
-  sendMessage: (message: Message) => void;
-  registerHandler: (type: string, handler: MessageHandler) => () => void;
+export interface WebSocketContextType {
   peerId: string | null;
   isConnected: boolean;
   isPeerInitialized: boolean;
   connections: DataConnection[];
+  connect: (joinCode: string) => Promise<void>;
+  disconnect: () => void;
+  sendMessage: (message: Message) => void;
+  registerHandler: (type: string, handler: MessageHandler) => () => void;
   generateShareLink: () => string;
   generateQRCode: () => string;
   initializePeer: () => Promise<string>;
-};
+  syncComplete: boolean; // Add this line
+}
 
 type WebSocketProviderProps = {
   children: ReactNode;
@@ -34,23 +41,37 @@ type WebSocketProviderProps = {
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
 
 // Provider component
-export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
+export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // 1. Get both currentCanvas and setCurrentCanvas from CanvasContext
+  const { currentCanvas, setCurrentCanvas } = useCanvas();
+  
   const [peer, setPeer] = useState<Peer | null>(null);
   const [peerId, setPeerId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isPeerInitialized, setIsPeerInitialized] = useState(false);
   const [connections, setConnections] = useState<DataConnection[]>([]);
-  const [messageHandlers, setMessageHandlers] = useState<Record<string, MessageHandler[]>>({});
+  const [messageHandlers, setMessageHandlers] = useState<MessageHandlers>({});
   const [peerInitializationPromise, setPeerInitializationPromise] = useState<Promise<string> | null>(null);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [syncComplete, setSyncComplete] = useState(false);
+  const [canvasStateSynced, setCanvasStateSynced] = useState(false);
+  const MAX_RECONNECT_ATTEMPTS = 3;
   
   const { user } = useAuth();
   
+  // Add persistent peer reference
+  const peerRef = useRef<Peer | null>(null);
+
   // Clean up peer on unmount
   useEffect(() => {
     return () => {
-      if (peer) {
-        console.log('Cleaning up peer on component unmount');
+      // Only cleanup on full unmount, not navigation
+      if (peer && window.location.pathname === '/') {
+        console.log('Cleaning up peer on final unmount');
         peer.destroy();
+        peerRef.current = null;
         setPeer(null);
         setPeerId(null);
         setIsPeerInitialized(false);
@@ -59,113 +80,21 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     };
   }, [peer]);
   
-  // Initialize peer - now a function that gets called explicitly
-  const initializePeer = useCallback(async (): Promise<string> => {
-    // If already initializing, return the existing promise
-    if (peerInitializationPromise) {
-      return peerInitializationPromise;
-    }
-    
-    // If peer already initialized, just return the ID
-    if (isPeerInitialized && peer && peerId) {
-      return peerId;
-    }
-    
-    // Clean up any existing peer before creating a new one
-    if (peer) {
-      console.log('Cleaning up existing peer before initializing a new one');
-      peer.destroy();
-      setPeer(null);
-      setPeerId(null);
-      setIsPeerInitialized(false);
-    }
-    
-    // Create a new promise for peer initialization
-    const promise = new Promise<string>((resolve, reject) => {
-      try {
-        console.log('Initializing peer with direct connection configuration');
-        
-        // Create a peer that prioritizes direct connections
-        const newPeer = new Peer(undefined, {
-          // No server config - use WebRTC directly
-          debug: 0,
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' }
-            ]
-          }
-        });
-        
-        // Set a timeout for initialization (increased to 90 seconds)
-        const initTimeout = setTimeout(() => {
-          if (!isPeerInitialized) {
-            console.error('Peer initialization timeout');
-            newPeer.destroy();
-            setPeerInitializationPromise(null);
-            reject(new Error('Peer initialization timeout'));
-          }
-        }, 90000); // 90 seconds timeout
-        
-        newPeer.on('open', (id) => {
-          console.log('My peer ID is:', id);
-          clearTimeout(initTimeout);
-          setPeerId(id);
-          setIsPeerInitialized(true);
-          setPeerInitializationPromise(null);
-          setPeer(newPeer);
-          toast.success(`Connected to peer network with ID: ${id.substring(0, 6)}...`);
-          resolve(id);
-        });
-        
-        newPeer.on('connection', (conn) => {
-          console.log('Incoming connection:', conn);
-          setupConnection(conn);
-        });
-        
-        newPeer.on('error', (err) => {
-          console.error('Peer connection error:', err);
-          
-          // Don't show errors during initialization
-          if (err.type !== 'server-error' && err.type !== 'network' && err.type !== 'disconnected') {
-            toast.error(`Connection error: ${err.message || 'Failed to connect'}`);
-          }
-          
-          // If we get a server error, try creating a peer without a server
-          if (err.type === 'server-error' && !newPeer.destroyed) {
-            console.log('Server unavailable, trying direct connection mode');
-            // The peer is already configured for direct connections
-          }
-          
-          // Only reject for fatal errors
-          if (err.type !== 'server-error' && err.type !== 'network') {
-            clearTimeout(initTimeout);
-            setPeerInitializationPromise(null);
-            reject(new Error(`Connection error: ${err.message || 'Failed to connect'}`));
-          }
-        });
-        
-        newPeer.on('close', () => {
-          console.log('Peer connection closed');
-          setPeerId(null);
-          setIsPeerInitialized(false);
-          setPeer(null);
-          setPeerInitializationPromise(null);
-        });
-        
-      } catch (error) {
-        console.error('Failed to initialize peer:', error);
-        setPeerInitializationPromise(null);
-        reject(error);
-      }
-    });
-    
-    // Store the promise
-    setPeerInitializationPromise(promise);
-    
-    return promise;
-  }, [peer, isPeerInitialized, peerId, peerInitializationPromise]);
+  // Register a handler for a specific message type
+  const registerHandler = useCallback((type: string, handler: MessageHandler) => {
+    console.log('Registering handler for:', type);
+    setMessageHandlers(prev => ({
+      ...prev,
+      [type]: [...(prev[type] || []), handler]
+    }));
+
+    return () => {
+      setMessageHandlers(prev => ({
+        ...prev,
+        [type]: prev[type]?.filter(h => h !== handler) || []
+      }));
+    };
+  }, []);
   
   // Handle messages by type
   const handleMessage = useCallback((type: string, payload: any) => {
@@ -173,136 +102,197 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       messageHandlers[type].forEach(handler => handler(payload));
     }
   }, [messageHandlers]);
-  
-  // Register a handler for a specific message type
-  const registerHandler = useCallback((type: string, handler: MessageHandler) => {
-    setMessageHandlers(prev => {
-      const handlers = prev[type] || [];
-      return {
-        ...prev,
-        [type]: [...handlers.filter(h => h !== handler), handler]
-      };
-    });
-    
-    // Return a function to unregister
-    return () => {
-      setMessageHandlers(prev => {
-        const handlers = prev[type] || [];
-        return {
-          ...prev,
-          [type]: handlers.filter(h => h !== handler)
-        };
-      });
-    };
-  }, []);
-  
+
   // Configure new connection
   const setupConnection = useCallback((conn: DataConnection) => {
     if (!conn) {
       console.error('Connection is null or undefined');
       return;
     }
-    
+
+    console.log('Setting up connection with peer:', conn.peer);
+
+    // Add connection to state immediately
+    setConnections(prev => [...prev.filter(c => c.peer !== conn.peer), conn]);
+
     conn.on('open', () => {
-      console.log('Connection established with', conn.peer);
-      setConnections(prev => [...prev.filter(c => c.peer !== conn.peer), conn]);
+      console.log('Connection opened with peer:', conn.peer);
       setIsConnected(true);
+      
+      // Request canvas state immediately after connection
+      const message = {
+        type: 'requestCanvasState',
+        payload: null,
+        sender: peerId,
+        timestamp: Date.now()
+      };
+      console.log('Sending canvas state request:', message);
+      conn.send(message);
+      
       toast.success(`Connected to peer: ${conn.peer.substring(0, 6)}...`);
     });
-    
+
     conn.on('data', (data: any) => {
       console.log('Received data:', data);
-      if (data && data.type) {
+      if (data?.type) {
         handleMessage(data.type, data.payload);
       }
     });
-    
+
     conn.on('close', () => {
-      console.log('Connection closed with', conn.peer);
+      console.log('Connection closed with peer:', conn.peer);
       setConnections(prev => prev.filter(c => c.peer !== conn.peer));
-      toast.info(`Peer ${conn.peer.substring(0, 6)}... disconnected`);
-      
-      // If no more connections, set isConnected to false
-      setConnections(prev => {
-        if (prev.length === 0) {
-          setIsConnected(false);
+      if (connections.length <= 1) {
+        setIsConnected(false);
+      }
+      setSyncComplete(false);
+    });
+
+  }, [handleMessage, peerId, connections, registerHandler]);
+
+  // Initialize peer with proper state management
+  const initializePeer = useCallback(async (): Promise<string> => {
+    if (peerInitializationPromise) {
+      return peerInitializationPromise;
+    }
+  
+    const promise = new Promise<string>((resolve, reject) => {
+      try {
+        // Clear existing peer if it exists
+        if (peer) {
+          peer.destroy();
+          setPeer(null);
+          setPeerId(null);
+          setIsPeerInitialized(false);
         }
-        return prev;
-      });
+
+        const newPeer = new Peer(undefined, {
+          host: '192.168.178.102',
+          port: 9000,
+          path: '/',
+          debug: 3,
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+          }
+        });
+  
+        newPeer.on('open', (id) => {
+          console.log('Peer successfully initialized with ID:', id);
+          peerRef.current = newPeer;
+          setPeer(newPeer); // Ensure peer is set
+          setPeerId(id);
+          setIsPeerInitialized(true);
+          resolve(id);
+        });
+  
+        newPeer.on('error', (error) => {
+          console.error('Peer error:', error);
+          reject(error);
+        });
+  
+        newPeer.on('disconnected', () => {
+          console.log('Peer disconnected, attempting to reconnect');
+          if (!newPeer.destroyed) {
+            newPeer.reconnect();
+          }
+        });
+  
+        newPeer.on('connection', (conn) => {
+          console.log('Incoming connection from', conn.peer);
+          setupConnection(conn);
+        });
+      } catch (error) {
+        console.error('Peer initialization error:', error);
+        reject(error);
+      }
     });
+  
+    setPeerInitializationPromise(promise);
+    return promise;
+  }, [setupConnection, peer]);
+
+  const handleReconnect = useCallback((peer: Peer) => {
+    setIsReconnecting(true);
+    const backoffTime = Math.min(1000 * Math.pow(2, connectionAttempts), 10000);
     
-    conn.on('error', (err) => {
-      console.error('Connection error:', err);
-      toast.error(`Connection error with peer ${conn.peer.substring(0, 6)}...`);
-    });
-  }, [handleMessage]);
+    setTimeout(() => {
+      setConnectionAttempts(prev => prev + 1);
+      peer.reconnect();
+    }, backoffTime);
+  }, [connectionAttempts]);
   
   // Connect to another peer
-  const connect = useCallback(async (joinCode: string) => {
+  const connect = useCallback(async (joinCode: string): Promise<void> => {
     if (!joinCode) {
-      console.error('Cannot connect: joinCode is missing');
-      toast.error('Cannot connect: no join code provided');
+      toast.error('No join code provided');
       return;
     }
-    
+  
     try {
-      // First make sure peer is initialized
-      if (!isPeerInitialized || !peer) {
-        try {
-          const id = await initializePeer();
-          console.log('Peer initialized with ID:', id);
-        } catch (error) {
-          console.error('Failed to initialize peer:', error);
-          toast.error('Failed to initialize peer connection');
-          return;
-        }
+      if (!isPeerInitialized || !peerRef.current || peerRef.current.destroyed) {
+        await initializePeer();
       }
-      
-      if (!peer) {
-        console.error('Cannot connect: peer is still missing after initialization');
-        toast.error('Cannot connect: peer connection not initialized');
-        return;
+  
+      if (!peerRef.current) {
+        throw new Error('Failed to initialize peer connection');
       }
-      
-      console.log('Connecting to peer:', joinCode);
-      
-      // Connect to the remote peer
-      const conn = peer.connect(joinCode, { 
+  
+      const conn = peerRef.current.connect(joinCode, {
         reliable: true,
-        serialization: 'json',
+        metadata: { userId: user?.id }
       });
-      
+  
       if (!conn) {
-        console.error('Failed to create connection');
-        toast.error('Failed to connect to canvas');
-        return;
+        throw new Error('Failed to create connection');
       }
-      
-      // Add timeout for connection
-      const connectionTimeout = setTimeout(() => {
-        if (!isConnected) {
-          console.error('Connection timeout');
-          toast.error('Connection timeout. Please try again.');
-        }
-      }, 15000);
-      
-      conn.on('open', () => {
-        clearTimeout(connectionTimeout);
-        setupConnection(conn);
+  
+      await new Promise<void>((resolve, reject) => {
+        const connectionTimeout = setTimeout(() => {
+          reject(new Error('Connection timeout'));
+        }, 15000);
+  
+        const handleOpen = () => {
+          clearTimeout(connectionTimeout);
+          console.log('Connection established, setting up connection');
+          setupConnection(conn);
+          
+          const waitForSync = () => {
+            if (canvasStateSynced) {
+              clearTimeout(connectionTimeout);
+              resolve();
+            } else {
+              setTimeout(waitForSync, 100);
+            }
+          };
+          
+          waitForSync();
+        };
+  
+        const handleError = (err: Error) => {
+          clearTimeout(connectionTimeout);
+          console.error('Connection error:', err);
+          reject(err);
+        };
+  
+        conn.on('open', handleOpen);
+        conn.on('error', handleError);
+  
+        // Cleanup listeners if connection fails
+        return () => {
+          conn.off('open', handleOpen);
+          conn.off('error', handleError);
+        };
       });
-      
-      conn.on('error', (err) => {
-        clearTimeout(connectionTimeout);
-        console.error('Connection error:', err);
-        toast.error('Failed to connect to canvas');
-      });
-      
-      toast.success(`Connecting to canvas with peer ID: ${joinCode.substring(0, 6)}...`);
+  
     } catch (error) {
-      console.error('Failed to connect to peer:', error);
-      toast.error('Failed to connect to canvas');
+      console.error('Connection failed:', error);
+      toast.error('Failed to establish connection');
+      throw error;
     }
-  }, [peer, setupConnection, isConnected, isPeerInitialized, initializePeer]);
+  }, [peerRef, isPeerInitialized, initializePeer, setupConnection, user, canvasStateSynced]);
   
   // Disconnect from peers
   const disconnect = useCallback(() => {
@@ -319,6 +309,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     setIsConnected(false);
     toast.info('Disconnected from all peers');
   }, [connections]);
+
+  useEffect(() => {
+    return () => {
+      // Remove peer teardown to keep peer alive across navigation
+      // disconnect();
+      // peer.destroy();
+      // setPeer(null);
+      // setPeerId(null);
+      // setIsPeerInitialized(false);
+      // setConnectionAttempts(0);
+      // setIsReconnecting(false);
+    };
+  }, [peer]);
   
   // Send message to all connected peers
   const sendMessage = useCallback((message: Message) => {
@@ -357,23 +360,81 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(shareLink)}&size=200x200`;
   }, [peerId, generateShareLink]);
   
-  // Context value
-  const value: WebSocketContextType = {
-    connect,
-    disconnect,
-    sendMessage,
-    registerHandler,
+  // 3. Update dependencies in contextValue
+  const contextValue = useMemo(() => ({
     peerId,
     isConnected,
     isPeerInitialized,
     connections,
+    connect,
+    disconnect,
+    sendMessage,
+    registerHandler,
     generateShareLink,
     generateQRCode,
-    initializePeer
-  };
-  
+    initializePeer,
+    syncComplete: canvasStateSynced
+  }), [
+    peerId,
+    isConnected,
+    isPeerInitialized,
+    connections,
+    connect,
+    disconnect,
+    sendMessage,
+    registerHandler,
+    generateShareLink,
+    generateQRCode,
+    initializePeer,
+    canvasStateSynced
+  ]);
+
+  // 2. Update useEffect with proper currentCanvas access
+  useEffect(() => {
+    if (!registerHandler) return;
+
+    const unregisterRequestState = registerHandler('requestCanvasState', () => {
+      if (!currentCanvas || !sendMessage) return;
+      
+      // Send canvas state to requesting peer
+      sendMessage({
+        type: 'canvasState',
+        payload: {
+          id: currentCanvas.id,
+          name: currentCanvas.name,
+          elements: currentCanvas.elements,
+          isInfinite: currentCanvas.isInfinite
+        }
+      });
+    });
+
+    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
+      console.log('Received canvas state:', payload);
+      if (!payload) return;
+
+      // Update canvas with received state
+      setCurrentCanvas({
+        id: payload.id,
+        name: payload.name || 'Shared Canvas',
+        elements: payload.elements || [],
+        createdBy: 'shared',
+        createdAt: new Date().toISOString(),
+        joinCode: '',
+        isInfinite: payload.isInfinite || true
+      });
+
+      setCanvasStateSynced(true);
+      toast.success('Canvas synced successfully');
+    });
+
+    return () => {
+      unregisterCanvasState();
+      unregisterRequestState();
+    };
+  }, [registerHandler, sendMessage, currentCanvas, setCurrentCanvas]);
+
   return (
-    <WebSocketContext.Provider value={value}>
+    <WebSocketContext.Provider value={contextValue}>
       {children}
     </WebSocketContext.Provider>
   );
@@ -382,8 +443,62 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 // Hook to use the WebSocket context
 export const useWebSocket = () => {
   const context = useContext(WebSocketContext);
+  console.log('useWebSocket called, context:', context);
   if (context === undefined) {
     throw new Error('useWebSocket must be used within a WebSocketProvider');
   }
   return context;
+};
+
+// Create a separate hook for canvas-websocket integration
+export const useCanvasWebSocket = () => {
+  const { currentCanvas, setCurrentCanvas } = useCanvas();
+  const { registerHandler, sendMessage } = useWebSocket();
+
+  useEffect(() => {
+    if (!registerHandler) return;
+
+    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
+      if (!payload) return;
+      
+      setCurrentCanvas({
+        id: payload.id,
+        name: payload.name || 'Shared Canvas',
+        elements: payload.elements || [],
+        createdBy: 'shared',
+        createdAt: new Date().toISOString(),
+        joinCode: payload.joinCode || '',
+        isInfinite: payload.isInfinite || true
+      });
+    });
+
+    const unregisterRequestState = registerHandler('requestCanvasState', () => {
+      if (!currentCanvas || !sendMessage) return;
+      
+      sendMessage({
+        type: 'canvasState',
+        payload: {
+          id: currentCanvas.id,
+          name: currentCanvas.name,
+          elements: currentCanvas.elements,
+          isInfinite: currentCanvas.isInfinite
+        }
+      });
+    });
+
+    return () => {
+      unregisterCanvasState();
+      unregisterRequestState();
+    };
+  }, [registerHandler, currentCanvas, sendMessage, setCurrentCanvas]);
+
+  return {
+    sendCanvasOperation: (operation: string, payload: any) => {
+      if (!sendMessage) return;
+      sendMessage({
+        type: 'canvasOperation',
+        payload: { operation, ...payload }
+      });
+    }
+  };
 };

@@ -738,6 +738,41 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  useEffect(() => {
+    if (!registerHandler) return;
+  
+    // Handle canvas state requests
+    const unregisterRequestState = registerHandler('requestCanvasState', () => {
+      if (currentCanvas && sendMessage) {
+        sendMessage({
+          type: 'canvasState',
+          payload: {
+            canvasId: currentCanvas.id,
+            elements: currentCanvas.elements
+          }
+        });
+      }
+    });
+  
+    // Handle incoming canvas state
+    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
+      setCurrentCanvas(prev => ({
+        ...prev!,
+        id: payload.canvasId,
+        elements: payload.elements,
+      }));
+    });
+  
+    return () => {
+      unregisterRequestState();
+      unregisterCanvasState();
+    };
+  }, [registerHandler, currentCanvas, sendMessage]);
+
+  useEffect(() => {
+    console.log('Current canvas updated:', currentCanvas);
+  }, [currentCanvas]);
+
   return (
     <CanvasContext.Provider value={{
       userCanvases,

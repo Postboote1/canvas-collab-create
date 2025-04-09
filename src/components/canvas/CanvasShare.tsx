@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
@@ -17,7 +16,6 @@ const CanvasShare: React.FC = () => {
   const { peerId, isPeerInitialized, generateShareLink, generateQRCode, initializePeer } = useWebSocket();
   
   const handleOpenShareDialog = async () => {
-    // Only initialize peer when opening the share dialog
     setIsDialogOpen(true);
     setInitError(null);
     

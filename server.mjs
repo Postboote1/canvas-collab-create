@@ -1,57 +1,68 @@
-
-import { PeerServer } from 'peerjs';
 import express from 'express';
-import path from 'path';
+import { createServer } from 'http';
+import { ExpressPeerServer } from 'peer';
 import cors from 'cors';
+import path from 'path';
 import { fileURLToPath } from 'url';
+import { networkInterfaces } from 'os'; // Import os module at the top
 
-// Get the directory name of the current module
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 9000;
 
-// Enable CORS for all routes with proper configuration
+// Enhanced CORS setup
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: '*',
+  credentials: true
 }));
 
-// Handle preflight requests
-app.options('*', cors());
-
-// Configure PeerJS server with proper CORS
-const peerServer = PeerServer({
-  port: 9000,
-  path: '/peerjs',
-  proxied: true,
-  corsOptions: {
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true
-  },
-  // Add debug option to see connection issues
-  debug: true
+// Create PeerJS server - IMPORTANT: path is '/' not '/peerjs'
+const peerServer = ExpressPeerServer(server, {
+  debug: true,
+  path: '/',  // Changed from '/peerjs' to '/'
+  allow_discovery: true,
+  proxied: true
 });
 
-console.log('PeerJS server running on port 9000 with path /peerjs');
+// Mount at the root path to avoid double path issues
+app.use('/', peerServer);  // Changed from '/peerjs' to '/'
 
-// Serve static files from the dist directory when in production
+// Serve static files for production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'dist')));
-  
-  // For any request that doesn't match a static file, serve the index.html
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
   });
 }
 
-// Start Express server on the same port as PeerJS server is already listening
-app.listen(PORT, () => {
-  console.log(`Express server running on port ${PORT}`);
+// Start the server on all network interfaces
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`PeerJS server available at http://<your-ip>:${PORT}`);
+  
+  // Display local IP addresses for easy connection
+  const nets = networkInterfaces();
+  
+  console.log('\nAvailable on:');
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip internal and non-IPv4 addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        console.log(`  http://${net.address}:${PORT}`);
+      }
+    }
+  }
+});
+
+// Log connections and disconnections
+peerServer.on('connection', (client) => {
+  console.log('Client connected:', client.getId());
+});
+
+peerServer.on('disconnect', (client) => {
+  console.log('Client disconnected:', client.getId());
 });

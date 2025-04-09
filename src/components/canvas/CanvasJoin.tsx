@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,7 @@ const CanvasJoin: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { connect, isPeerInitialized, isConnected, initializePeer } = useWebSocket();
+  const { connect, isPeerInitialized, isConnected, initializePeer, registerHandler, syncComplete } = useWebSocket();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -39,48 +38,46 @@ const CanvasJoin: React.FC = () => {
   
   const handleJoinCanvas = async (e: React.FormEvent | null, codeOverride?: string) => {
     if (e) e.preventDefault();
-    
+  
     const codeToUse = codeOverride || joinCode;
-    
     if (!codeToUse.trim()) {
-      toast.error('Please enter a peer ID');
+      toast.error('Please enter a valid join code');
       return;
     }
-    
+  
     setIsLoading(true);
     setError(null);
-    
+  
     try {
-      // Initialize peer if not already initialized
       if (!isPeerInitialized) {
-        setIsInitializing(true);
-        try {
-          await initializePeer();
-        } catch (error) {
-          console.error('Failed to initialize peer:', error);
-          setError('Failed to initialize peer connection. Try again later.');
-          toast.error('Failed to initialize peer connection. Try again later.');
-          setIsLoading(false);
-          setIsInitializing(false);
-          return;
-        }
-        setIsInitializing(false);
+        await initializePeer();
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      
-      connect(codeToUse.trim());
-      
-      // Set a timeout to give up if connection takes too long
-      setTimeout(() => {
-        if (isLoading && !isConnected) {
-          setIsLoading(false);
-          setError('Connection is taking too long. Please verify the peer ID and try again.');
-          toast.error('Connection is taking too long. Please try again.');
-        }
-      }, 20000);
+  
+      await connect(codeToUse.trim());
+  
+      // Wait for sync completion
+      await new Promise((resolve, reject) => {
+        const checkSync = () => {
+          if (syncComplete) {
+            resolve(null);
+          } else {
+            setTimeout(checkSync, 100);
+          }
+        };
+        
+        setTimeout(() => {
+          reject(new Error('Canvas sync timeout'));
+        }, 10000);
+  
+        checkSync();
+      });
+  
+      toast.success('Successfully connected to canvas');
+      navigate('/canvas');
     } catch (error) {
       console.error('Error joining canvas:', error);
-      setError('Failed to join canvas. Please check your network and try again.');
-      toast.error('Failed to join canvas');
+      setError('Failed to join canvas. Please check the join code and try again.');
       setIsLoading(false);
     }
   };
