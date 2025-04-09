@@ -12,7 +12,24 @@ const CanvasShare: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [copyLinkClicked, setCopyLinkClicked] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { peerId, isPeerInitialized, generateShareLink, generateQRCode } = useWebSocket();
+  const [isInitializing, setIsInitializing] = useState(false);
+  const { peerId, isPeerInitialized, generateShareLink, generateQRCode, initializePeer } = useWebSocket();
+  
+  const handleOpenShareDialog = async () => {
+    // Only initialize peer when opening the share dialog
+    if (!isPeerInitialized) {
+      setIsInitializing(true);
+      try {
+        await initializePeer();
+      } catch (error) {
+        console.error('Failed to initialize peer:', error);
+        toast.error('Failed to initialize peer connection');
+      } finally {
+        setIsInitializing(false);
+      }
+    }
+    setIsDialogOpen(true);
+  };
   
   const copyPeerId = () => {
     if (peerId) {
@@ -35,26 +52,25 @@ const CanvasShare: React.FC = () => {
   
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-1 bg-green-500 text-white hover:bg-green-600"
-          disabled={!isPeerInitialized}
-        >
-          {isPeerInitialized ? (
-            <>
-              <Share size={16} />
-              Share
-            </>
-          ) : (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Initializing...
-            </>
-          )}
-        </Button>
-      </DialogTrigger>
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex items-center gap-1 bg-green-500 text-white hover:bg-green-600"
+        onClick={handleOpenShareDialog}
+        disabled={isInitializing}
+      >
+        {isInitializing ? (
+          <>
+            <Loader2 size={16} className="animate-spin" />
+            Initializing...
+          </>
+        ) : (
+          <>
+            <Share size={16} />
+            Share
+          </>
+        )}
+      </Button>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Share Canvas</DialogTitle>

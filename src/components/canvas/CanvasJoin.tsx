@@ -10,7 +10,8 @@ import { Loader2 } from 'lucide-react';
 const CanvasJoin: React.FC = () => {
   const [joinCode, setJoinCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { connect, isPeerInitialized, isConnected } = useWebSocket();
+  const [isInitializing, setIsInitializing] = useState(false);
+  const { connect, isPeerInitialized, isConnected, initializePeer } = useWebSocket();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -19,12 +20,10 @@ const CanvasJoin: React.FC = () => {
     const codeFromUrl = searchParams.get('code');
     if (codeFromUrl) {
       setJoinCode(codeFromUrl);
-      // If peer is already initialized, connect automatically
-      if (isPeerInitialized) {
-        handleJoinCanvas(null, codeFromUrl);
-      }
+      // Auto-join if code is in URL
+      handleJoinCanvas(null, codeFromUrl);
     }
-  }, [searchParams, isPeerInitialized]);
+  }, [searchParams]);
   
   // If connection is established, navigate to canvas
   useEffect(() => {
@@ -44,17 +43,25 @@ const CanvasJoin: React.FC = () => {
       return;
     }
     
-    if (!isPeerInitialized) {
-      toast.error('Peer connection not initialized yet. Please try again in a moment.');
-      return;
-    }
-    
     setIsLoading(true);
+    
     try {
-      connect(codeToUse.trim());
+      // Initialize peer if not already initialized
+      if (!isPeerInitialized) {
+        setIsInitializing(true);
+        try {
+          await initializePeer();
+        } catch (error) {
+          console.error('Failed to initialize peer:', error);
+          toast.error('Failed to initialize peer connection');
+          setIsLoading(false);
+          setIsInitializing(false);
+          return;
+        }
+        setIsInitializing(false);
+      }
       
-      // We don't immediately navigate - we wait for the connection to be established first
-      // See the useEffect above
+      connect(codeToUse.trim());
       
       // Set a timeout to give up if connection takes too long
       setTimeout(() => {
@@ -85,23 +92,22 @@ const CanvasJoin: React.FC = () => {
         <Button 
           type="submit" 
           className="w-full" 
-          disabled={isLoading || !isPeerInitialized}
+          disabled={isLoading || isInitializing}
         >
           {isLoading ? (
             <span className="flex items-center">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Connecting...
             </span>
+          ) : isInitializing ? (
+            <span className="flex items-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Initializing...
+            </span>
           ) : (
             'Join Canvas'
           )}
         </Button>
-        
-        {!isPeerInitialized && (
-          <p className="text-sm text-orange-500 mt-2 text-center">
-            Initializing peer connection...
-          </p>
-        )}
       </form>
     </div>
   );
