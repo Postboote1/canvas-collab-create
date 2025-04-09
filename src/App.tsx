@@ -32,34 +32,32 @@ declare global {
 function App() {
   return (
     <ThemeProvider>
-      
-        <AuthProvider>
-          <WebSocketProvider> {/* WebSocketProvider must wrap CanvasProvider */}
-            <CanvasProvider>
-              <AnalyticsProvider>
-                <Router>
-                  <Routes>
-                    <Route path="/" element={<Layout />}>
-                      <Route index element={<HomePage />} />
-                      <Route path="login" element={<LoginPage />} />
-                      <Route path="register" element={<RegisterPage />} />
-                      <Route path="dashboard" element={<DashboardPage />} />
-                      <Route path="create" element={<CreateCanvasPage />} />
-                      <Route path="create-temp" element={<CreateTempCanvasPage />} />
-                      <Route path="join/:joinCode?" element={<JoinPage />} />
-                      <Route path="admin" element={<AdminPage />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Route>
-                    <Route path="/canvas" element={<CanvasPage />} />
-                    <Route path="/presentation" element={<PresentationMode />} />
-                  </Routes>
-                </Router>
-                <Toaster position="top-right" />
-              </AnalyticsProvider>
-            </CanvasProvider>
-          </WebSocketProvider>
-        </AuthProvider>
-      
+      <AuthProvider>
+        <WebSocketProvider> {/* WebSocketProvider must wrap CanvasProvider */}
+          <CanvasProvider>
+            <AnalyticsProvider>
+              <Router>
+                <Routes>
+                  <Route path="/" element={<Layout />}>
+                    <Route index element={<HomePage />} />
+                    <Route path="login" element={<LoginPage />} />
+                    <Route path="register" element={<RegisterPage />} />
+                    <Route path="dashboard" element={<DashboardPage />} />
+                    <Route path="create" element={<CreateCanvasPage />} />
+                    <Route path="create-temp" element={<CreateTempCanvasPage />} />
+                    <Route path="join/:joinCode?" element={<JoinPage />} />
+                    <Route path="admin" element={<AdminPage />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Route>
+                  <Route path="/canvas" element={<CanvasPage />} />
+                  <Route path="/presentation" element={<PresentationMode />} />
+                </Routes>
+              </Router>
+              <Toaster position="top-right" />
+            </AnalyticsProvider>
+          </CanvasProvider>
+        </WebSocketProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

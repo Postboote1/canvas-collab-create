@@ -42,9 +42,7 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 
 // Provider component
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Get both currentCanvas and setCurrentCanvas from CanvasContext
-  const { currentCanvas, setCurrentCanvas } = useCanvas();
-  
+  // State variables
   const [peer, setPeer] = useState<Peer | null>(null);
   const [peerId, setPeerId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -63,6 +61,22 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   
   // Add persistent peer reference
   const peerRef = useRef<Peer | null>(null);
+
+  // 1. Move useCanvas inside useEffect
+  const [canvasContext, setCanvasContext] = useState<{ currentCanvas: any, setCurrentCanvas: any } | null>(null);
+
+  useEffect(() => {
+    // 1. Get both currentCanvas and setCurrentCanvas from CanvasContext
+    try {
+      const canvasValues = useCanvas();
+      setCanvasContext(canvasValues);
+    } catch (error) {
+      console.error("Error getting CanvasContext:", error);
+    }
+  }, []);
+
+  const currentCanvas = canvasContext?.currentCanvas;
+  const setCurrentCanvas = canvasContext?.setCurrentCanvas;
 
   // Clean up peer on unmount
   useEffect(() => {
@@ -167,7 +181,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         const newPeer = new Peer(undefined, {
-          host: '192.168.178.102',
+          host: '192.168.178.90',
           port: 9000,
           path: '/',
           debug: 3,

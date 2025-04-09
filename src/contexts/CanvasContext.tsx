@@ -59,7 +59,14 @@ const CANVAS_STORAGE_KEY = 'global_canvases';
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const { registerHandler, sendMessage } = useWebSocket();
+  const webSocketContext = useWebSocket();
+
+  if (!webSocketContext) {
+    console.error('WebSocketProvider is not initialized yet.');
+    return null; // Prevent rendering until WebSocketProvider is ready
+  }
+
+  const { registerHandler, sendMessage } = webSocketContext;
   const [userCanvases, setUserCanvases] = useState<Canvas[]>([]);
   const [currentCanvas, setCurrentCanvas] = useState<Canvas | null>(null);
   const canvasRef = useRef(currentCanvas);
@@ -71,57 +78,18 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // WebSocket message handling
   useEffect(() => {
-    const handleCanvasUpdate = (payload: any) => {
-      if (!canvasRef.current) return;
+    if (!registerHandler) return;
 
-      switch (payload.operation) {
-        case 'add':
-          setCurrentCanvas(prev => ({
-            ...prev!,
-            elements: [...prev!.elements, payload.element]
-          }));
-          break;
-        case 'update':
-          setCurrentCanvas(prev => ({
-            ...prev!,
-            elements: prev!.elements.map(el => 
-              el.id === payload.element.id ? { ...el, ...payload.element } : el
-            )
-          }));
-          break;
-        case 'delete':
-          setCurrentCanvas(prev => ({
-            ...prev!,
-            elements: prev!.elements.filter(el => el.id !== payload.elementId)
-          }));
-          break;
-      }
-    };
-
-    // Use the return value from registerHandler directly
-    const unregisterCanvasOperation = registerHandler('canvasOperation', handleCanvasUpdate);
-    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
-      setCurrentCanvas({
-        id: payload.canvasId,
-        name: 'Collaborative Canvas',
-        elements: payload.elements,
-        createdBy: 'collab',
-        createdAt: new Date().toISOString(),
-        joinCode: payload.joinCode,
-        isInfinite: true
-      });
+    const unregisterHandler = registerHandler('canvasUpdate', (payload) => {
+      console.log('Received canvas update:', payload);
+      // Handle canvas update logic
     });
 
     return () => {
-      if (typeof unregisterCanvasOperation === 'function') {
-        unregisterCanvasOperation();
-      }
-      if (typeof unregisterCanvasState === 'function') {
-        unregisterCanvasState();
-      }
+      unregisterHandler();
     };
   }, [registerHandler]);
-  
+
   // Load user canvases when user changes
   useEffect(() => {
     if (user) {
