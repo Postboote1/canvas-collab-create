@@ -88,3 +88,4 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 12. Item for card is missleading
 13. No rectangle objekt
 14. Notification on canvas only at the bottom not at the top
+15. Export as PDF and Image 
