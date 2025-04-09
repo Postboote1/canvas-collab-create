@@ -90,3 +90,4 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 14. Notification on canvas only at the bottom not at the top
 15. Export as PDF and Image 
 16. Better image movement 
+17. Only can save canvas when an objekt is added and then an image. A canvas can not be saved when only a image is uploaded
