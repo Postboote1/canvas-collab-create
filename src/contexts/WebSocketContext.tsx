@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { useAuth } from './AuthContext';
@@ -32,23 +33,6 @@ type WebSocketProviderProps = {
 // Create context
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
 
-// Get peer server config based on environment
-const getPeerServerConfig = () => {
-  // First try with direct peer connection options (local discovery)
-  return {
-    host: 'localhost', // This will be ignored for direct connections
-    port: 9000,
-    path: '/peerjs',
-    debug: 0, // Reduced debug level
-    config: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    }
-  };
-};
-
 // Provider component
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
   const [peer, setPeer] = useState<Peer | null>(null);
@@ -57,8 +41,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [isPeerInitialized, setIsPeerInitialized] = useState(false);
   const [connections, setConnections] = useState<DataConnection[]>([]);
   const [messageHandlers, setMessageHandlers] = useState<Record<string, MessageHandler[]>>({});
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const [isReconnecting, setIsReconnecting] = useState(false);
   const [peerInitializationPromise, setPeerInitializationPromise] = useState<Promise<string> | null>(null);
   
   const { user } = useAuth();
@@ -98,44 +80,41 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       setIsPeerInitialized(false);
     }
     
-    setIsReconnecting(true);
-    
     // Create a new promise for peer initialization
     const promise = new Promise<string>((resolve, reject) => {
       try {
-        const peerConfig = getPeerServerConfig();
-        console.log('Initializing peer with config:', peerConfig);
+        console.log('Initializing peer with direct connection configuration');
         
-        // Create a peer object without a server connection first
-        // This will allow for direct WebRTC connections without a server
+        // Create a peer that prioritizes direct connections
         const newPeer = new Peer(undefined, {
-          ...peerConfig,
-          host: window.location.hostname, // Use the current hostname
-          port: window.location.protocol === 'https:' ? 443 : 80, // Use standard ports
-          path: '/peerjs',
-          secure: window.location.protocol === 'https:',
+          // No server config - use WebRTC directly
+          debug: 0,
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+          }
         });
         
-        // Set a timeout for initialization
+        // Set a timeout for initialization (increased to 90 seconds)
         const initTimeout = setTimeout(() => {
           if (!isPeerInitialized) {
             console.error('Peer initialization timeout');
             newPeer.destroy();
-            setIsReconnecting(false);
             setPeerInitializationPromise(null);
             reject(new Error('Peer initialization timeout'));
           }
-        }, 30000);
+        }, 90000); // 90 seconds timeout
         
         newPeer.on('open', (id) => {
           console.log('My peer ID is:', id);
           clearTimeout(initTimeout);
           setPeerId(id);
           setIsPeerInitialized(true);
-          setReconnectAttempts(0);
-          setIsReconnecting(false);
-          setPeer(newPeer);
           setPeerInitializationPromise(null);
+          setPeer(newPeer);
           toast.success(`Connected to peer network with ID: ${id.substring(0, 6)}...`);
           resolve(id);
         });
@@ -148,22 +127,22 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         newPeer.on('error', (err) => {
           console.error('Peer connection error:', err);
           
-          // Don't show errors during initialization or if server is unavailable
-          if (!isReconnecting && err.type !== 'server-error') {
-            toast.error(`Connection error: ${err.message || 'Failed to connect'}`);
-          }
-          
-          // Only reject if this is a fatal error
+          // Don't show errors during initialization
           if (err.type !== 'server-error' && err.type !== 'network' && err.type !== 'disconnected') {
-            setPeerInitializationPromise(null);
-            reject(new Error(`Connection error: ${err.message || 'Failed to connect'}`));
+            toast.error(`Connection error: ${err.message || 'Failed to connect'}`);
           }
           
           // If we get a server error, try creating a peer without a server
           if (err.type === 'server-error' && !newPeer.destroyed) {
             console.log('Server unavailable, trying direct connection mode');
-            // The peer is created without server connection already
-            // Just let it keep trying with STUN servers
+            // The peer is already configured for direct connections
+          }
+          
+          // Only reject for fatal errors
+          if (err.type !== 'server-error' && err.type !== 'network') {
+            clearTimeout(initTimeout);
+            setPeerInitializationPromise(null);
+            reject(new Error(`Connection error: ${err.message || 'Failed to connect'}`));
           }
         });
         
@@ -177,7 +156,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         
       } catch (error) {
         console.error('Failed to initialize peer:', error);
-        setIsReconnecting(false);
         setPeerInitializationPromise(null);
         reject(error);
       }
@@ -187,7 +165,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     setPeerInitializationPromise(promise);
     
     return promise;
-  }, [peer, isPeerInitialized, peerId, isReconnecting, peerInitializationPromise]);
+  }, [peer, isPeerInitialized, peerId, peerInitializationPromise]);
   
   // Handle messages by type
   const handleMessage = useCallback((type: string, payload: any) => {
@@ -291,7 +269,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       // Connect to the remote peer
       const conn = peer.connect(joinCode, { 
         reliable: true,
-        // Add serialization: 'json' for better data handling
         serialization: 'json',
       });
       
