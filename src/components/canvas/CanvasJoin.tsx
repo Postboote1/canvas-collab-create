@@ -20,8 +20,10 @@ const CanvasJoin: React.FC = () => {
     const codeFromUrl = searchParams.get('code');
     if (codeFromUrl) {
       setJoinCode(codeFromUrl);
-      // Auto-join if code is in URL
-      handleJoinCanvas(null, codeFromUrl);
+      // Auto-join if code is in URL, with slight delay to let components mount
+      setTimeout(() => {
+        handleJoinCanvas(null, codeFromUrl);
+      }, 500);
     }
   }, [searchParams]);
   
@@ -53,7 +55,7 @@ const CanvasJoin: React.FC = () => {
           await initializePeer();
         } catch (error) {
           console.error('Failed to initialize peer:', error);
-          toast.error('Failed to initialize peer connection');
+          toast.error('Failed to initialize peer connection. Try again later.');
           setIsLoading(false);
           setIsInitializing(false);
           return;

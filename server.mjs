@@ -14,9 +14,12 @@ const PORT = process.env.PORT || 9000;
 // Enable CORS for all routes
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Configure PeerJS server
 const peerServer = PeerServer({
@@ -25,9 +28,11 @@ const peerServer = PeerServer({
   proxied: true,
   corsOptions: {
     origin: '*',
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
-  }
+  },
+  // Add debug option to see connection issues
+  debug: true
 });
 
 console.log('PeerJS server running on port 9000 with path /peerjs');

@@ -17,18 +17,19 @@ const CanvasShare: React.FC = () => {
   
   const handleOpenShareDialog = async () => {
     // Only initialize peer when opening the share dialog
+    setIsDialogOpen(true);
+    
     if (!isPeerInitialized) {
       setIsInitializing(true);
       try {
         await initializePeer();
       } catch (error) {
         console.error('Failed to initialize peer:', error);
-        toast.error('Failed to initialize peer connection');
+        toast.error('Failed to initialize peer connection. Please try again later.');
       } finally {
         setIsInitializing(false);
       }
     }
-    setIsDialogOpen(true);
   };
   
   const copyPeerId = () => {
@@ -52,25 +53,27 @@ const CanvasShare: React.FC = () => {
   
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex items-center gap-1 bg-green-500 text-white hover:bg-green-600"
-        onClick={handleOpenShareDialog}
-        disabled={isInitializing}
-      >
-        {isInitializing ? (
-          <>
-            <Loader2 size={16} className="animate-spin" />
-            Initializing...
-          </>
-        ) : (
-          <>
-            <Share size={16} />
-            Share
-          </>
-        )}
-      </Button>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-1 bg-green-500 text-white hover:bg-green-600"
+          onClick={handleOpenShareDialog}
+          disabled={isInitializing}
+        >
+          {isInitializing ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Initializing...
+            </>
+          ) : (
+            <>
+              <Share size={16} />
+              Share
+            </>
+          )}
+        </Button>
+      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Share Canvas</DialogTitle>
@@ -164,9 +167,9 @@ const CanvasShare: React.FC = () => {
           </TabsContent>
         </Tabs>
         
-        {!isPeerInitialized && (
+        {isInitializing && (
           <p className="mt-2 text-orange-500">
-            Still initializing peer connection. Please wait a moment...
+            Initializing peer connection. Please wait a moment...
           </p>
         )}
       </DialogContent>

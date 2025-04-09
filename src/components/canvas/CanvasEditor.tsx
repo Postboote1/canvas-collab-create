@@ -16,7 +16,7 @@ interface CanvasEditorProps {
 const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
-  const { isConnected, connect, disconnect, sendMessage } = useWebSocket();
+  const { isConnected, sendMessage } = useWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -34,23 +34,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Connect to WebSocket when canvas changes
-  // Connect to WebSocket when canvas changes
-  useEffect(() => {
-    if (currentCanvas && currentCanvas.joinCode) {
-      console.log("Connecting to canvas with join code:", currentCanvas.joinCode);
-      connect(currentCanvas.joinCode);
-      
-      // Save current canvas to localStorage for new peers
-      localStorage.setItem('currentCanvas', JSON.stringify(currentCanvas));
-
-      return () => {
-        localStorage.removeItem('currentCanvas');
-        disconnect();
-      };
-    }
-  }, [currentCanvas, connect, disconnect]);
-
   // Auto-save every 30 seconds
   useEffect(() => {
     if (!readOnly && currentCanvas) {
@@ -61,6 +44,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       return () => clearInterval(interval);
     }
   }, [readOnly, currentCanvas, saveCanvas]);
+
+  // Remove the effect that was auto-connecting to peers
+  // This connection should only happen when the Share button is clicked
 
   // Handle mouse down on canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -626,8 +612,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCanvas, scale, viewportPosition]); // Re-bind if scale/position changes
-
+  }, [currentCanvas, scale, viewportPosition]);
 
   return (
     <div className="flex flex-col h-full dark:bg-zinc-800">
@@ -646,10 +631,10 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       <div
         className="relative flex-grow overflow-hidden cursor-grab active:cursor-grabbing"
         onWheel={handleCanvasWheel}
-        onMouseDown={(e) => { if (e.button === 2) handleCanvasMouseDown(e); }} // Pan start on right mouse down
-        onMouseMove={handleCanvasMouseMove} // Handles both dragging and panning move
-        onMouseUp={(e) => { if (e.button === 2) handleCanvasMouseUp(); }} // Pan end on right mouse up
-        onContextMenu={handleContextMenu} // Prevent default menu
+        onMouseDown={(e) => { if (e.button === 2) handleCanvasMouseDown(e); }}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={(e) => { if (e.button === 2) handleCanvasMouseUp(); }}
+        onContextMenu={handleContextMenu}
       >
         <div
           ref={canvasRef}
@@ -657,53 +642,19 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           style={{
             width: '100000px',
             height: '100000px',
-            // Apply transform based on viewport position and scale
             transform: `translate(${-(viewportPosition.x * scale)}px, ${-(viewportPosition.y * scale)}px) scale(${scale})`,
             transformOrigin: '0 0',
             cursor: isPanning ? 'grabbing' : (activeTool === 'select' ? 'default' : 'crosshair'),
-            // Center the large div initially (approximate)
             left: `calc(50% - 50000px * ${scale})`,
             top: `calc(50% - 50000px * ${scale})`,
-            touchAction: 'none', // Prevent default touch actions like scroll/zoom
+            touchAction: 'none',
           }}
-          onMouseDown={(e) => { if (e.button !== 2) handleCanvasMouseDown(e); }} // Handle non-panning mouse down
-          onMouseUp={(e) => { if (e.button !== 2) handleCanvasMouseUp(); }} // Handle non-panning mouse up
-          onMouseLeave={handleCanvasMouseUp} // End drawing/dragging if mouse leaves
-          // Touch events
-          onTouchStart={(e) => {
-            if (e.touches.length === 1) {
-              handleTouchStart(e); // Handle single touch start (drawing, selection)
-            } else if (e.touches.length === 2) {
-              // Handle two-finger pan/zoom start
-              e.preventDefault();
-              setIsPanning(true);
-              const t1 = e.touches[0];
-              const t2 = e.touches[1];
-              setPanStartPosition({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
-              // Could also store initial distance for pinch-zoom here
-            }
-          }}
-          onTouchMove={(e) => {
-             if (e.touches.length === 1 && !isPanning) {
-               handleTouchMove(e); // Handle single touch move (drawing, dragging)
-             } else if (e.touches.length === 2 && isPanning) {
-               // Handle two-finger pan/zoom move
-               e.preventDefault();
-               const t1 = e.touches[0];
-               const t2 = e.touches[1];
-               const currentMidX = (t1.clientX + t2.clientX) / 2;
-               const currentMidY = (t1.clientY + t2.clientY) / 2;
-               const deltaX = currentMidX - panStartPosition.x;
-               const deltaY = currentMidY - panStartPosition.y;
-               setViewportPosition(prev => ({ x: prev.x - deltaX / scale, y: prev.y - deltaY / scale }));
-               setPanStartPosition({ x: currentMidX, y: currentMidY });
-               // Could calculate distance change for pinch-zoom here
-            }
-          }}
-          onTouchEnd={(e) => {
-            if (isPanning) setIsPanning(false); // End panning state
-            if (e.touches.length < 2) handleCanvasMouseUp(); // Handle end of single touch (drawing, dragging)
-          }}
+          onMouseDown={(e) => { if (e.button !== 2) handleCanvasMouseDown(e); }}
+          onMouseUp={(e) => { if (e.button !== 2) handleCanvasMouseUp(); }}
+          onMouseLeave={handleCanvasMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleCanvasMouseUp}
         >
           {/* Content container for elements and temporary drawing */}
           <div ref={contentRef} className="absolute top-0 left-0" style={{ width: '100%', height: '100%' }}>
@@ -720,7 +671,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                 onDeleteElement={handleDeleteElement}
                 readOnly={readOnly}
                 allElements={currentCanvas.elements}
-                onSelectElement={setSelectedElement} // Pass selection handler
+                onSelectElement={setSelectedElement}
               />
             ))}
 
@@ -734,10 +685,10 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                   }, '')}
                   fill="none"
                   stroke={activeColor}
-                  strokeWidth={2 / scale} // Adjust stroke width based on scale
+                  strokeWidth={2 / scale}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke" // Keep stroke visually consistent
+                  vectorEffect="non-scaling-stroke"
                 />
               </svg>
             )}
