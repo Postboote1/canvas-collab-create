@@ -15,7 +15,8 @@ const viteProcess = spawn('npm', ['run', 'dev'], {
 // Start PeerJS server
 const peerProcess = spawn('node', ['server.mjs'], {
   stdio: 'inherit',
-  shell: true
+  shell: true,
+  env: { ...process.env }
 });
 
 // Handle graceful shutdown
