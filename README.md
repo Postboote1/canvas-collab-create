@@ -71,3 +71,15 @@ Yes it is!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+### To does:
+1. presentation no other objekts like circle get displayed
+2. frames für slides
+3. delete drawings
+4. menu on item/card not working
+5. presentation white background
+6. pocketbase for users and cloud storage
+7. Canvas can be saved to account limit max. 5 / 25Mb (maybe compression?)
+7. optimize for touchscreens
+8. new tool eraser to erase drawings and arrows
+9. Admin Page with admin login for me with statistics

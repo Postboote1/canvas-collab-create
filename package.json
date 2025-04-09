@@ -9,7 +9,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "start": "node server.js",
-    "start:dev": "node scripts/start-dev.mjs"
+    "start:dev": "node scripts/start-dev.mjs",
+    "build:dev": "vite build --mode development"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -46,6 +47,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
+    "cors": "^2.8.5",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.3.0",
     "express": "^5.1.0",
@@ -55,6 +57,7 @@
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
     "path": "^0.12.7",
+    "peer": "^1.0.2",
     "peerjs": "^1.5.4",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
