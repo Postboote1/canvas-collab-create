@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWebSocket } from '@/contexts/WebSocketContext';
@@ -12,6 +12,19 @@ const CanvasJoin: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { connect, isPeerInitialized, isConnected } = useWebSocket();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Check for code in URL parameters
+  useEffect(() => {
+    const codeFromUrl = searchParams.get('code');
+    if (codeFromUrl) {
+      setJoinCode(codeFromUrl);
+      // If peer is already initialized, connect automatically
+      if (isPeerInitialized) {
+        handleJoinCanvas(null, codeFromUrl);
+      }
+    }
+  }, [searchParams, isPeerInitialized]);
   
   // If connection is established, navigate to canvas
   useEffect(() => {
@@ -21,10 +34,12 @@ const CanvasJoin: React.FC = () => {
     }
   }, [isConnected, isLoading, navigate]);
   
-  const handleJoinCanvas = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleJoinCanvas = async (e: React.FormEvent | null, codeOverride?: string) => {
+    if (e) e.preventDefault();
     
-    if (!joinCode.trim()) {
+    const codeToUse = codeOverride || joinCode;
+    
+    if (!codeToUse.trim()) {
       toast.error('Please enter a peer ID');
       return;
     }
@@ -36,7 +51,7 @@ const CanvasJoin: React.FC = () => {
     
     setIsLoading(true);
     try {
-      connect(joinCode.trim());
+      connect(codeToUse.trim());
       
       // We don't immediately navigate - we wait for the connection to be established first
       // See the useEffect above

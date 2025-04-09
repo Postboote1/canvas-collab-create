@@ -20,7 +20,7 @@ app.use(cors({
 
 // Configure PeerJS server
 const peerServer = PeerServer({
-  port: 9001,
+  port: 9000,
   path: '/peerjs',
   proxied: true,
   corsOptions: {
@@ -30,7 +30,7 @@ const peerServer = PeerServer({
   }
 });
 
-console.log('PeerJS server running on port 9001 with path /peerjs');
+console.log('PeerJS server running on port 9000 with path /peerjs');
 
 // Serve static files from the dist directory when in production
 if (process.env.NODE_ENV === 'production') {
@@ -42,7 +42,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Start Express server
+// Start Express server on the same port as PeerJS server is already listening
 app.listen(PORT, () => {
   console.log(`Express server running on port ${PORT}`);
 });
