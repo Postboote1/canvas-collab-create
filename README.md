@@ -83,4 +83,5 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 7. optimize for touchscreens
 8. new tool eraser to erase drawings and arrows
 9. Admin Page with admin login for me with statistics
-10. Different roles (viewer, editor, ...)
+10. Different roles (viewer, editor)
+11. Improve Arrow creation currently sometimes gets stuck
