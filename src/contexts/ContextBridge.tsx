@@ -66,7 +66,10 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!registerHandler || !sendMessage) return;
     
     const unregisterCanvasUpdate = registerHandler('canvasUpdate', (payload) => {
-      console.log('CanvasUpdate received:', payload);
+      // Enhanced logging to trace the update flow
+      console.log(`ContextBridge handler processing ${payload.operation}:`, payload);
+      console.log('Current canvas before update:', currentCanvas?.elements?.length || 0);
+      console.log('Current canvas ID:', currentCanvas?.id);
       
       if (!payload || !payload.operation) {
         console.error('Invalid canvas update received');
@@ -77,8 +80,11 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
         console.error('No current canvas to update');
         return;
       }
-      
+
       try {
+        // Store the current canvas ID to check for consistency
+        const canvasId = currentCanvas.id;
+        
         switch (payload.operation) {
           case 'add':
             if (payload.element) {
@@ -90,21 +96,20 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
                 y: typeof payload.element.y === 'number' ? payload.element.y : 0
               };
               
-              console.log('Adding element from remote:', elementToAdd);
+              console.log('Adding element to canvas ID:', canvasId);
+              console.log('Element data:', elementToAdd);
               
-              // Use a function to update state to avoid stale state issues
-              setCurrentCanvas(prev => {
-                if (!prev) return prev;
-                
-                // Create a new elements array
-                const updatedElements = [...prev.elements, elementToAdd];
-                console.log(`Canvas now has ${updatedElements.length} elements`);
-                
-                return {
-                  ...prev,
-                  elements: updatedElements
-                };
-              });
+              // Use a direct approach to update state - this is key to fixing the issue
+              const updatedCanvas = {
+                ...currentCanvas,
+                elements: [...currentCanvas.elements, elementToAdd]
+              };
+              
+              // Set the state directly
+              setCurrentCanvas(updatedCanvas);
+              
+              // Log the result
+              console.log(`Element added, canvas now has ${updatedCanvas.elements.length} elements`);
               
               toast.success('New element added by collaborator', {
                 position: 'bottom-right',
@@ -186,6 +191,17 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
       unregisterCanvasUpdate();
     };
   }, [registerHandler, sendMessage, currentCanvas, setCurrentCanvas]);
+
+  // Canvas audit logging
+  useEffect(() => {
+    if (currentCanvas) {
+      console.log('AUDIT: Canvas updated:', {
+        id: currentCanvas.id,
+        elements: currentCanvas.elements.length,
+        elementIds: currentCanvas.elements.map(el => el.id)
+      });
+    }
+  }, [currentCanvas]);
 
   return <>{children}</>;
 };
