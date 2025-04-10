@@ -28,13 +28,23 @@ const CanvasJoin: React.FC = () => {
     }
   }, [searchParams]);
   
-  // If connection is established, navigate to canvas
+  // If connection is established, check for canvas data
   useEffect(() => {
-    if (isConnected && isLoading) {
-      setIsLoading(false);
-      navigate('/canvas');
+    if (isConnected) {
+      // Check for canvas data in multiple ways
+      const pendingCanvas = localStorage.getItem('pendingCanvasState');
+      
+      if (pendingCanvas || syncComplete) {
+        setIsLoading(false);
+        console.log('Successfully connected and canvas data received, navigating to canvas page');
+        
+        // Delay navigation slightly to allow state updates
+        setTimeout(() => {
+          navigate('/canvas');
+        }, 500);
+      }
     }
-  }, [isConnected, isLoading, navigate]);
+  }, [isConnected, syncComplete, navigate]);
   
   const handleJoinCanvas = async (e: React.FormEvent | null, codeOverride?: string) => {
     if (e) e.preventDefault();
@@ -50,35 +60,31 @@ const CanvasJoin: React.FC = () => {
   
     try {
       if (!isPeerInitialized) {
+        setIsInitializing(true);
         await initializePeer();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsInitializing(false);
       }
-  
-      await connect(codeToUse.trim());
-  
-      // Wait for sync completion
-      await new Promise((resolve, reject) => {
-        const checkSync = () => {
-          if (syncComplete) {
-            resolve(null);
-          } else {
-            setTimeout(checkSync, 100);
-          }
-        };
-        
-        setTimeout(() => {
-          reject(new Error('Canvas sync timeout'));
-        }, 10000);
-  
-        checkSync();
-      });
-  
-      toast.success('Successfully connected to canvas');
-      navigate('/canvas');
+      
+      await connect(codeToUse);
+      
+      // After connecting, check for canvas data even if sync flag isn't set
+      setTimeout(() => {
+        const pendingCanvas = localStorage.getItem('pendingCanvasState');
+        if (pendingCanvas) {
+          navigate('/canvas');
+        }
+      }, 5000); // Give some time for canvas state to be received
     } catch (error) {
       console.error('Error joining canvas:', error);
       setError('Failed to join canvas. Please check the join code and try again.');
       setIsLoading(false);
+      
+      // Even if there's an error, check if we got canvas data
+      const pendingCanvas = localStorage.getItem('pendingCanvasState');
+      if (pendingCanvas) {
+        toast.info('Canvas data found, proceeding to canvas');
+        navigate('/canvas');
+      }
     }
   };
   

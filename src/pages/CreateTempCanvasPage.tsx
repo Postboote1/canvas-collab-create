@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +12,29 @@ const CreateTempCanvasPage: React.FC = () => {
   const [isInfinite, setIsInfinite] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   
-  const { createTempCanvas } = useCanvas();
+  const { createTempCanvas, setCurrentCanvas } = useCanvas();
   const navigate = useNavigate();
+
+  // Check for pending canvas state on load
+  useEffect(() => {
+    const pendingCanvasState = localStorage.getItem('pendingCanvasState');
+    if (pendingCanvasState) {
+      try {
+        const canvas = JSON.parse(pendingCanvasState);
+        setCurrentCanvas(canvas);
+        localStorage.removeItem('pendingCanvasState'); // Clear after using
+        
+        // Also restore connection if it exists
+        localStorage.removeItem('pendingConnection');
+        
+        toast.success('Shared canvas loaded');
+        navigate('/canvas');
+      } catch (error) {
+        console.error('Error loading pending canvas state:', error);
+        toast.error('Failed to load shared canvas');
+      }
+    }
+  }, [setCurrentCanvas, navigate]);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

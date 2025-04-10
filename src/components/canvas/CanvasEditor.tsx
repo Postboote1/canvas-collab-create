@@ -16,7 +16,7 @@ interface CanvasEditorProps {
 const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
-  const { isConnected, sendMessage } = useWebSocket();
+  const { isConnected, sendMessage, registerHandler } = useWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -440,25 +440,38 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   };
 
   const handleUpdateElement = (id: string, updates: Partial<CanvasElementType>) => {
+    // Ensure coordinates are valid numbers if they're being updated
+    const validatedUpdates = {
+      ...updates,
+      x: updates.x !== undefined ? Number(updates.x) : undefined,
+      y: updates.y !== undefined ? Number(updates.y) : undefined
+    };
+    
+    updateElement(id, validatedUpdates);
+  
+    // Send update to peers
     if (isConnected && sendMessage) {
-      sendMessage({
-        type: 'canvasOperation',
-        payload: {
-          operation: 'update',
-          element: { id, ...updates }
-        }
-      });
+      const updatedElement = currentCanvas?.elements.find(el => el.id === id);
+      if (updatedElement) {
+        console.log('Broadcasting element update to peers:', { id, ...validatedUpdates });
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'update',
+            element: { id, ...validatedUpdates }
+          }
+        });
+      }
     }
   };
 
   // Handle element deletion
   const handleDeleteElement = (id: string) => {
     deleteElement(id);
-    toast.success('Element deleted', {
-      position: 'bottom-center',
-    });
-
+  
+    // Send delete operation to peers
     if (isConnected && sendMessage) {
+      console.log('Broadcasting element deletion to peers:', id);
       sendMessage({
         type: 'canvasOperation',
         payload: {
@@ -467,11 +480,39 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         }
       });
     }
-
+  
     setSelectedElement(null);
     if (arrowStart === id) {
       setArrowStart(null); // Cancel arrow creation if start element is deleted
     }
+  };
+
+  // Create a handleAddElement function that handles both local add and peer sync
+  // Add this after your handleDeleteElement function (around line 482)
+  const handleAddElement = (element: Omit<CanvasElementType, 'id'>) => {
+    // Ensure coordinates are valid numbers
+    const validatedElement = {
+      ...element,
+      x: typeof element.x === 'number' ? element.x : 0,
+      y: typeof element.y === 'number' ? element.y : 0
+    };
+    
+    // Add element locally
+    const newElementWithId = addElement(validatedElement);
+    
+    // Send to connected peers if any
+    if (isConnected && sendMessage) {
+      console.log('Broadcasting new element to peers:', newElementWithId);
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'add',
+          element: newElementWithId
+        }
+      });
+    }
+    
+    return newElementWithId;
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -614,6 +655,33 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCanvas, scale, viewportPosition]);
 
+  // Add this to your CanvasEditor component
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    // Debug: monitor real-time updates from others
+    const unregisterDebugHandler = registerHandler('canvasUpdate', (payload) => {
+      console.log(`DEBUG: Canvas operation received in editor: ${payload.operation}`, payload);
+      
+      // Show a visual indicator of real-time updates
+      if (payload.element) {
+        toast.success(`Collaborator ${payload.operation === 'add' ? 'added' : 'updated'} an element`, {
+          position: 'bottom-right',
+          duration: 2000
+        });
+      } else if (payload.elementId) {
+        toast.info(`Collaborator deleted an element`, {
+          position: 'bottom-right',
+          duration: 2000
+        });
+      }
+    });
+    
+    return () => {
+      unregisterDebugHandler();
+    };
+  }, [isConnected, registerHandler]);
+
   return (
     <div className="flex flex-col h-full dark:bg-zinc-800">
       <CanvasToolbar
@@ -664,10 +732,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
                 key={element.id}
                 element={element}
                 selected={element.id === selectedElement}
-                onUpdateElement={(updates) => {
-                  updateElement(element.id, updates);
-                  handleUpdateElement(element.id, updates);
-                }}
+                onUpdateElement={(updates) => handleUpdateElement(element.id, updates)}
                 onDeleteElement={handleDeleteElement}
                 readOnly={readOnly}
                 allElements={currentCanvas.elements}
@@ -723,5 +788,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     </div>
   );
 };
+
+
 
 export default CanvasEditor;

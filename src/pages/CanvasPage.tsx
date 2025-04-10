@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -12,7 +11,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 
 const CanvasPage: React.FC = () => {
-  const { currentCanvas, saveCurrentCanvasToAccount } = useCanvas();
+  const { currentCanvas, saveCurrentCanvasToAccount, setCurrentCanvas } = useCanvas();
   const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
@@ -23,14 +22,63 @@ const CanvasPage: React.FC = () => {
       navigate('/create-temp');
     }
   }, [currentCanvas, navigate]);
+
+  // Update the useEffect that loads the pending canvas
+  useEffect(() => {
+    // More robust check for pending canvas state
+    const loadPendingCanvas = () => {
+      try {
+        const pendingCanvasState = localStorage.getItem('pendingCanvasState');
+        
+        if (pendingCanvasState) {
+          const canvasData = JSON.parse(pendingCanvasState);
+          console.log('Loading pending canvas state:', canvasData);
+          
+          // Only load the pending canvas if:
+          // 1. We don't have a current canvas, OR
+          // 2. The current canvas is empty but the pending one has elements, OR
+          // 3. The current canvas has a different ID from the pending one
+          const shouldLoadPending = 
+            !currentCanvas || 
+            (currentCanvas.id !== canvasData.id) || 
+            (currentCanvas.elements.length === 0 && canvasData.elements.length > 0);
+          
+          if (shouldLoadPending) {
+            console.log('Setting canvas from pending state');
+            setCurrentCanvas(canvasData);
+            toast.success(`Canvas "${canvasData.name}" loaded`);
+            
+            // Remove the pending state after successfully loading it
+            setTimeout(() => {
+              localStorage.removeItem('pendingCanvasState');
+            }, 2000);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading pending canvas state:', error);
+        toast.error('Failed to load shared canvas');
+      }
+    };
+    
+    // Run once on mount
+    loadPendingCanvas();
+    
+    // Also run when currentCanvas changes
+    const intervalId = setInterval(loadPendingCanvas, 2000);
+    
+    return () => clearInterval(intervalId);
+  }, [currentCanvas, setCurrentCanvas]);
   
   if (!currentCanvas) {
     return <div>Loading...</div>;
   }
   
-  const isCreator = user && currentCanvas.createdBy === user.id;
-  const isAnonymous = currentCanvas.createdBy === 'anonymous';
+  // Set readOnly to false for all users to allow collaborative editing
+  const isReadOnly = false; // Let everyone edit the canvas
   
+  // Check if the canvas was created anonymously
+  const isAnonymous = currentCanvas.createdBy === 'anonymous';
+
   const handleSaveToAccount = async () => {
     if (!isLoggedIn()) {
       toast.info('Please log in to save this canvas');
@@ -104,7 +152,7 @@ const CanvasPage: React.FC = () => {
         </div>
         
         <div className="flex-1 overflow-hidden">
-          <CanvasEditor readOnly={!isAnonymous && !isCreator} />
+          <CanvasEditor readOnly={isReadOnly} />
         </div>
       </div>
     </ThemeProvider>

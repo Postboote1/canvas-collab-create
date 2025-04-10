@@ -148,6 +148,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     }
   };
   
+
   return (
     <TooltipProvider delayDuration={300}>
       <Card className="border-b bg-card shadow-sm">

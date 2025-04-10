@@ -483,15 +483,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       elements: [...prev.elements, newElement] 
     } : prev);
     
-    if (sendMessage) {
-      sendMessage({
-        type: 'canvasOperation',
-        payload: {
-          operation: 'add',
-          element: newElement
-        }
-      });
-    }
+    // Return the new element with its ID
+    return newElement;
   }, [sendMessage]);
 
   const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
