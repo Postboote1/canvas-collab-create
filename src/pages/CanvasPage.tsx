@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -16,7 +15,6 @@ const CanvasPage: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
-  const [hasPendingCanvasLoaded, setHasPendingCanvasLoaded] = useState(false);
   
   // Redirect if no canvas is loaded
   useEffect(() => {
@@ -27,9 +25,6 @@ const CanvasPage: React.FC = () => {
 
   // Update the useEffect that loads the pending canvas
   useEffect(() => {
-    // Only load pending canvas once to avoid overwrites
-    if (hasPendingCanvasLoaded) return;
-    
     // More robust check for pending canvas state
     const loadPendingCanvas = () => {
       try {
@@ -53,21 +48,26 @@ const CanvasPage: React.FC = () => {
             setCurrentCanvas(canvasData);
             toast.success(`Canvas "${canvasData.name}" loaded`);
             
-            // Set flag to prevent reloading
-            setHasPendingCanvasLoaded(true);
-            
             // Remove the pending state after successfully loading it
-            localStorage.removeItem('pendingCanvasState');
+            setTimeout(() => {
+              localStorage.removeItem('pendingCanvasState');
+            }, 2000);
           }
         }
       } catch (error) {
         console.error('Error loading pending canvas state:', error);
+        toast.error('Failed to load shared canvas');
       }
     };
     
     // Run once on mount
     loadPendingCanvas();
-  }, [currentCanvas, setCurrentCanvas, hasPendingCanvasLoaded]);
+    
+    // Also run when currentCanvas changes
+    const intervalId = setInterval(loadPendingCanvas, 2000);
+    
+    return () => clearInterval(intervalId);
+  }, [currentCanvas, setCurrentCanvas]);
   
   if (!currentCanvas) {
     return <div>Loading...</div>;

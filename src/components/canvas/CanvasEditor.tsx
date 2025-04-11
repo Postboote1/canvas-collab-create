@@ -1,5 +1,5 @@
 // src/components/canvas/CanvasEditor.tsx
-import React, { useRef, useState, useEffect, ChangeEvent } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
@@ -8,7 +8,6 @@ import CanvasElement from './CanvasElement';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { useCanvasWebSocket } from '@/hooks/useCanvasWebSocket';
 
 interface CanvasEditorProps {
   readOnly?: boolean;
@@ -18,7 +17,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler } = useWebSocket();
-  const { requestCanvasState } = useCanvasWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -31,23 +29,10 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const [scale, setScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
   const [panStartPosition, setPanStartPosition] = useState({ x: 0, y: 0 });
-  const [hasSentInitialRequest, setHasSentInitialRequest] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Request initial canvas state when connected
-  useEffect(() => {
-    if (isConnected && !hasSentInitialRequest && currentCanvas) {
-      console.log('Connecting to canvas with join code:', currentCanvas.joinCode);
-      
-      // Request full canvas state from peers using the dedicated hook
-      requestCanvasState();
-      
-      setHasSentInitialRequest(true);
-    }
-  }, [isConnected, currentCanvas, requestCanvasState, hasSentInitialRequest]);
 
   // Auto-save every 30 seconds
   useEffect(() => {
@@ -59,6 +44,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       return () => clearInterval(interval);
     }
   }, [readOnly, currentCanvas, saveCanvas]);
+
+  // Remove the effect that was auto-connecting to peers
+  // This connection should only happen when the Share button is clicked
 
   // Handle mouse down on canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -113,21 +101,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         color: activeColor
       };
 
-      // Add element locally first
-      const newElement = addElement(newCard);
-      
+      addElement(newCard);
       toast.success('Card added', {
         position: 'bottom-center',
       });
 
-      // Then broadcast to peers
-      if (isConnected && sendMessage) {
-        console.log('Broadcasting new card to peers:', newElement);
+      if (isConnected) {
         sendMessage({
           type: 'canvasOperation',
           payload: {
             operation: 'add',
-            element: newElement
+            element: newCard
           }
         });
       }
@@ -330,33 +314,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         const newX = x - dragOffset.x;
         const newY = y - dragOffset.y;
 
-        // Update element locally first
         updateElement(selectedElement, { x: newX, y: newY });
 
-        // Then broadcast cursor and element update
-        if (isConnected && sendMessage) {
-          // Send cursor position for collaborator awareness
+        if (isConnected) {
           sendMessage({
             type: 'cursorMove',
             payload: { x: e.clientX, y: e.clientY }
           });
-          
-          // Send element update with slight delay to avoid flooding
-          // This is important to ensure updates are not lost
-          if (element) {
-            sendMessage({
-              type: 'canvasOperation',
-              payload: {
-                operation: 'update',
-                element: { 
-                  id: selectedElement,
-                  x: newX,
-                  y: newY,
-                  type: element.type
-                }
-              }
-            });
-          }
+      
         }
       }
     }
@@ -482,31 +447,18 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       y: updates.y !== undefined ? Number(updates.y) : undefined
     };
     
-    // Update element locally
     updateElement(id, validatedUpdates);
   
-    // Send update to peers with all necessary information
+    // Send update to peers
     if (isConnected && sendMessage) {
       const updatedElement = currentCanvas?.elements.find(el => el.id === id);
       if (updatedElement) {
         console.log('Broadcasting element update to peers:', { id, ...validatedUpdates });
-        
-        // Send a complete element update to ensure peers have all necessary data
-        const elementToSend = {
-          id,
-          ...validatedUpdates,
-          type: updatedElement.type,
-          // Include these to ensure peers have complete data
-          content: updatedElement.content,
-          width: updatedElement.width,
-          height: updatedElement.height
-        };
-        
         sendMessage({
           type: 'canvasOperation',
           payload: {
             operation: 'update',
-            element: elementToSend
+            element: { id, ...validatedUpdates }
           }
         });
       }
@@ -535,60 +487,173 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
 
-  // Fixed handleImageUpload function 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0] || readOnly) return;
+  // Create a handleAddElement function that handles both local add and peer sync
+  // Add this after your handleDeleteElement function (around line 482)
+  const handleAddElement = (element: Omit<CanvasElementType, 'id'>) => {
+    // Ensure coordinates are valid numbers
+    const validatedElement = {
+      ...element,
+      x: typeof element.x === 'number' ? element.x : 0,
+      y: typeof element.y === 'number' ? element.y : 0
+    };
     
+    // Add element locally
+    const newElementWithId = addElement(validatedElement);
+    
+    // Send to connected peers if any
+    if (isConnected && sendMessage) {
+      console.log('Broadcasting new element to peers:', newElementWithId);
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'add',
+          element: newElementWithId
+        }
+      });
+    }
+    
+    return newElementWithId;
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0] || !canvasRef.current || readOnly) return;
+
     const file = e.target.files[0];
     const reader = new FileReader();
-    
+
     reader.onload = (event) => {
-      if (!event.target || !event.target.result) return;
+      if (!event.target?.result) return;
 
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      const rect = canvasRef.current!.getBoundingClientRect();
+      // Place image in the center of the current view
+      const centerX = (rect.width / 2) / scale + viewportPosition.x;
+      const centerY = (rect.height / 2) / scale + viewportPosition.y;
 
-      // Position the image at the center of the current viewport
-      const x = viewportPosition.x + rect.width / (2 * scale);
-      const y = viewportPosition.y + rect.height / (2 * scale);
-
-      // Fixed: Use imageUrl instead of src to match the CanvasElement type
       const newImage: Omit<CanvasElementType, 'id'> = {
         type: 'image',
-        imageUrl: event.target.result.toString(),
-        x,
-        y,
-        width: 300, // Default width
-        height: 200, // Default height or will be adjusted to aspect ratio
+        x: centerX - 100, // Center based on default size
+        y: centerY - 75,
+        width: 200,
+        height: 150,
+        imageUrl: event.target.result as string
       };
 
-      // Add element locally
-      const newElement = addElement(newImage);
-      
+      addElement(newImage);
       toast.success('Image added', {
         position: 'bottom-center',
       });
 
-      // Broadcast to peers
-      if (isConnected && sendMessage) {
+      if (isConnected) {
         sendMessage({
           type: 'canvasOperation',
           payload: {
             operation: 'add',
-            element: newElement
+            element: newImage
           }
         });
       }
 
-      // Reset tool after adding image
       setActiveTool('select');
     };
-    
+
     reader.readAsDataURL(file);
-    
-    // Reset the input value so the same file can be uploaded again
-    e.target.value = '';
+    e.target.value = ''; // Clear input
   };
+
+  const handleExportAsImage = () => {
+    if (!contentRef.current) {
+      toast.error('Canvas content not ready for export');
+      return;
+    }
+
+    // Temporarily reset scale and position for accurate capture
+    const originalScale = scale;
+    const originalPosition = { ...viewportPosition };
+    // TODO: Calculate actual bounds of content instead of resetting to 0,0
+    // For now, reset to capture from top-left; might miss content
+    setScale(1);
+    setViewportPosition({ x: 0, y: 0 });
+
+    setTimeout(() => {
+      html2canvas(contentRef.current!, {
+        backgroundColor: null, // Transparent background
+        scale: window.devicePixelRatio,
+        allowTaint: true,
+        useCORS: true,
+        // TODO: Set width/height/x/y based on calculated content bounds
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `${currentCanvas?.name || 'canvas'}_export.png`;
+        link.href = imgData;
+        link.click();
+        toast.success('Canvas exported as image');
+      }).catch(err => {
+        console.error('Image export failed:', err);
+        toast.error('Failed to export canvas as image');
+      }).finally(() => {
+        // Restore original scale and position
+        setScale(originalScale);
+        setViewportPosition(originalPosition);
+      });
+    }, 100);
+  };
+
+  const handleExportAsPDF = () => {
+    if (!contentRef.current) {
+      toast.error('Canvas content not ready for export');
+      return;
+    }
+
+    const originalScale = scale;
+    const originalPosition = { ...viewportPosition };
+    // TODO: Calculate actual bounds
+    setScale(1);
+    setViewportPosition({ x: 0, y: 0 });
+
+    setTimeout(() => {
+      html2canvas(contentRef.current!, {
+        backgroundColor: '#ffffff', // White background for PDF
+        scale: window.devicePixelRatio * 2, // Higher scale for PDF quality
+        allowTaint: true,
+        useCORS: true,
+        // TODO: Set width/height/x/y based on calculated content bounds
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? 'l' : 'p',
+          unit: 'px',
+          format: [canvas.width, canvas.height]
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`${currentCanvas?.name || 'canvas'}_export.pdf`);
+        toast.success('Canvas exported as PDF');
+      }).catch(err => {
+        console.error('PDF export failed:', err);
+        toast.error('Failed to export canvas as PDF');
+      }).finally(() => {
+        setScale(originalScale);
+        setViewportPosition(originalPosition);
+      });
+    }, 100);
+  };
+
+  // Expose export methods globally
+  useEffect(() => {
+    if (!currentCanvas) return;
+    if (typeof window !== 'undefined') {
+      (window as any).__canvasExportMethods = {
+        exportAsImage: handleExportAsImage,
+        exportAsPDF: handleExportAsPDF
+      };
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__canvasExportMethods;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCanvas, scale, viewportPosition]);
 
   // Add this to your CanvasEditor component
   useEffect(() => {
@@ -723,5 +788,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     </div>
   );
 };
+
+
 
 export default CanvasEditor;
