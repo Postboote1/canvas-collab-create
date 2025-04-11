@@ -68,23 +68,37 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
     const unregisterCanvasUpdate = registerHandler('canvasUpdate', (payload) => {
       // Enhanced logging to trace the update flow
       console.log(`ContextBridge handler processing ${payload.operation}:`, payload);
-      console.log('Current canvas before update:', currentCanvas?.elements?.length || 0);
-      console.log('Current canvas ID:', currentCanvas?.id);
       
       if (!payload || !payload.operation) {
         console.error('Invalid canvas update received');
         return;
       }
       
-      if (!currentCanvas) {
-        console.error('No current canvas to update');
+      // Get current canvas from localStorage or state
+      let canvas = currentCanvas;
+      
+      // Try to get the latest canvas data from localStorage
+      try {
+        const pendingCanvasState = localStorage.getItem('pendingCanvasState');
+        if (pendingCanvasState) {
+          const parsedCanvas = JSON.parse(pendingCanvasState);
+          if (parsedCanvas && parsedCanvas.elements) {
+            canvas = parsedCanvas;
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing pending canvas state:', error);
+      }
+      
+      if (!canvas) {
+        console.error('No current canvas to update in ContextBridge');
         return;
       }
+      
+      console.log('Current canvas before update:', canvas.elements.length || 0);
+      console.log('Current canvas ID:', canvas.id);
 
       try {
-        // Store the current canvas ID to check for consistency
-        const canvasId = currentCanvas.id;
-        
         switch (payload.operation) {
           case 'add':
             if (payload.element) {
@@ -96,19 +110,28 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
                 y: typeof payload.element.y === 'number' ? payload.element.y : 0
               };
               
-              console.log('Adding element to canvas ID:', canvasId);
+              // Check if element already exists
+              const elementExists = canvas.elements.some(el => el.id === elementToAdd.id);
+              if (elementExists) {
+                console.log(`Element ${elementToAdd.id} already exists in canvas, skipping`);
+                return;
+              }
+              
+              console.log('Adding element to canvas ID:', canvas.id);
               console.log('Element data:', elementToAdd);
               
-              // Use a direct approach to update state - this is key to fixing the issue
+              // Create a new canvas object with the added element
               const updatedCanvas = {
-                ...currentCanvas,
-                elements: [...currentCanvas.elements, elementToAdd]
+                ...canvas,
+                elements: [...canvas.elements, elementToAdd]
               };
               
-              // Set the state directly
+              // Update the local state
               setCurrentCanvas(updatedCanvas);
               
-              // Log the result
+              // Also update localStorage for persistence
+              localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+              
               console.log(`Element added, canvas now has ${updatedCanvas.elements.length} elements`);
               
               toast.success('New element added by collaborator', {
@@ -122,31 +145,35 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
             if (payload.element && payload.element.id) {
               console.log('Updating element from remote:', payload.element);
               
-              // Update using functional update to avoid stale state
-              setCurrentCanvas(prev => {
-                if (!prev) return prev;
-                
-                // Check if element exists
-                const elementExists = prev.elements.some(el => el.id === payload.element.id);
-                if (!elementExists) {
-                  console.warn(`Element ${payload.element.id} not found for update`);
-                  return prev;
-                }
-                
-                // Create a new elements array with the updated element
-                return {
-                  ...prev,
-                  elements: prev.elements.map(el => 
-                    el.id === payload.element.id ? {
-                      ...el,
-                      ...payload.element,
-                      // Ensure valid coordinates when updating
-                      x: payload.element.x !== undefined ? Number(payload.element.x) : el.x,
-                      y: payload.element.y !== undefined ? Number(payload.element.y) : el.y
-                    } : el
-                  )
-                };
-              });
+              // Find the element and update it
+              const elementIndex = canvas.elements.findIndex(el => el.id === payload.element.id);
+              if (elementIndex === -1) {
+                console.warn(`Element ${payload.element.id} not found for update in ContextBridge`);
+                return;
+              }
+              
+              // Create a new canvas object with the updated element and ensure coordinates are numbers
+              const updatedCanvas = {
+                ...canvas,
+                elements: canvas.elements.map((el, index) => 
+                  index === elementIndex ? { 
+                    ...el, 
+                    ...payload.element,
+                    // Always convert coordinates to numbers
+                    x: typeof payload.element.x === 'number' ? payload.element.x : 
+                       (payload.element.x !== undefined ? Number(payload.element.x) : el.x),
+                    y: typeof payload.element.y === 'number' ? payload.element.y : 
+                       (payload.element.y !== undefined ? Number(payload.element.y) : el.y)
+                  } : el
+                )
+              };
+              
+              // Important: Update the state directly with this update to ensure immediate UI changes
+              console.log(`Element ${payload.element.id} updated, applying now`);
+              setCurrentCanvas(updatedCanvas);
+              
+              // Also update localStorage for persistence
+              localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
             }
             break;
             
@@ -154,23 +181,26 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
             if (payload.elementId) {
               console.log('Deleting element from remote:', payload.elementId);
               
-              // Update using functional update to avoid stale state
-              setCurrentCanvas(prev => {
-                if (!prev) return prev;
-                
-                // Check if element exists
-                const elementExists = prev.elements.some(el => el.id === payload.elementId);
-                if (!elementExists) {
-                  console.warn(`Element ${payload.elementId} not found for deletion`);
-                  return prev;
-                }
-                
-                // Create a new elements array without the deleted element
-                return {
-                  ...prev,
-                  elements: prev.elements.filter(el => el.id !== payload.elementId)
-                };
-              });
+              // Find the element
+              const elementExists = canvas.elements.some(el => el.id === payload.elementId);
+              if (!elementExists) {
+                console.warn(`Element ${payload.elementId} not found for deletion in ContextBridge`);
+                return;
+              }
+              
+              // Create a new canvas object without the deleted element
+              const updatedCanvas = {
+                ...canvas,
+                elements: canvas.elements.filter(el => el.id !== payload.elementId)
+              };
+              
+              // Update the local state
+              setCurrentCanvas(updatedCanvas);
+              
+              // Also update localStorage for persistence
+              localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+              
+              console.log(`Element ${payload.elementId} deleted`);
               
               toast.success('Element deleted by collaborator', {
                 position: 'bottom-right',
@@ -183,7 +213,7 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
             console.warn('Unknown operation:', payload.operation);
         }
       } catch (error) {
-        console.error('Error processing canvas operation:', error);
+        console.error('Error processing canvas operation in ContextBridge:', error);
       }
     });
 

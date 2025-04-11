@@ -493,17 +493,28 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const updated = prev.elements.map(el => 
         el.id === id ? { ...el, ...updates } : el
       );
-      if (sendMessage) {
-        sendMessage({
-          type: 'canvasOperation',
-          payload: {
-            operation: 'update',
-            element: { id, ...updates }
-          }
-        });
-      }
+      
+      // Move the sendMessage outside the setCurrentCanvas callback
       return { ...prev, elements: updated };
     });
+  
+    // Send message after state update, include timestamp for uniqueness
+    if (sendMessage) {
+    // Generate a unique update identifier
+      const updateId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'update',
+          element: { 
+            id, 
+            ...updates,
+            _timestamp: updateId // Add timestamp to ensure uniqueness
+          }
+        }
+      });
+    }
   }, [sendMessage]);
 
   const deleteElement = useCallback((id: string) => {

@@ -6,6 +6,7 @@ import CanvasEditor from '@/components/canvas/CanvasEditor';
 import CanvasShare from '@/components/canvas/CanvasShare';
 import { useCanvas } from '@/contexts/CanvasContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 import { Helmet } from 'react-helmet';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
@@ -13,8 +14,13 @@ import { toast } from 'sonner';
 const CanvasPage: React.FC = () => {
   const { currentCanvas, saveCurrentCanvasToAccount, setCurrentCanvas } = useCanvas();
   const { user, isLoggedIn } = useAuth();
+  const { isConnected } = useWebSocket();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Move these state hooks to the top level of the component
+  const [loadAttempts, setLoadAttempts] = useState(0);
+  const [lastLoadedCanvasId, setLastLoadedCanvasId] = useState<string | null>(null);
   
   // Redirect if no canvas is loaded
   useEffect(() => {
@@ -25,7 +31,7 @@ const CanvasPage: React.FC = () => {
 
   // Update the useEffect that loads the pending canvas
   useEffect(() => {
-    // More robust check for pending canvas state
+    // Don't declare state hooks inside useEffect
     const loadPendingCanvas = () => {
       try {
         const pendingCanvasState = localStorage.getItem('pendingCanvasState');
@@ -34,40 +40,42 @@ const CanvasPage: React.FC = () => {
           const canvasData = JSON.parse(pendingCanvasState);
           console.log('Loading pending canvas state:', canvasData);
           
-          // Only load the pending canvas if:
-          // 1. We don't have a current canvas, OR
-          // 2. The current canvas is empty but the pending one has elements, OR
-          // 3. The current canvas has a different ID from the pending one
+          // Check if this canvas data has new elements
           const shouldLoadPending = 
             !currentCanvas || 
             (currentCanvas.id !== canvasData.id) || 
-            (currentCanvas.elements.length === 0 && canvasData.elements.length > 0);
+            (canvasData.elements && canvasData.elements.length > (currentCanvas.elements?.length || 0)) ||
+            (lastLoadedCanvasId !== canvasData.id);
           
           if (shouldLoadPending) {
-            console.log('Setting canvas from pending state');
+            console.log('Setting canvas from pending state, elements count:', canvasData.elements.length);
             setCurrentCanvas(canvasData);
-            toast.success(`Canvas "${canvasData.name}" loaded`);
+            setLastLoadedCanvasId(canvasData.id);
             
-            // Remove the pending state after successfully loading it
-            setTimeout(() => {
-              localStorage.removeItem('pendingCanvasState');
-            }, 2000);
+            toast.success(`Canvas "${canvasData.name}" loaded with ${canvasData.elements.length} elements`, {
+              id: 'canvas-loaded-toast', // Prevent duplicate toasts
+              duration: 3000
+            });
           }
         }
       } catch (error) {
         console.error('Error loading pending canvas state:', error);
-        toast.error('Failed to load shared canvas');
+        setLoadAttempts(prev => prev + 1);
+        
+        if (loadAttempts > 5) {
+          toast.error('Failed to load shared canvas');
+        }
       }
     };
     
     // Run once on mount
     loadPendingCanvas();
     
-    // Also run when currentCanvas changes
+    // Also run periodically to catch any updates
     const intervalId = setInterval(loadPendingCanvas, 2000);
     
     return () => clearInterval(intervalId);
-  }, [currentCanvas, setCurrentCanvas]);
+  }, [currentCanvas, setCurrentCanvas, isConnected, loadAttempts, lastLoadedCanvasId]); // Add new dependencies
   
   if (!currentCanvas) {
     return <div>Loading...</div>;

@@ -15,7 +15,7 @@ interface CanvasEditorProps {
 
 const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
-  const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
+  const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas, setCurrentCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler } = useWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
@@ -314,14 +314,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         const newX = x - dragOffset.x;
         const newY = y - dragOffset.y;
 
-        updateElement(selectedElement, { x: newX, y: newY });
+        // Replace direct updateElement call with handleUpdateElement to ensure broadcasting
+        handleUpdateElement(selectedElement, { x: newX, y: newY });
 
+        // Send cursor move separately if needed
         if (isConnected) {
           sendMessage({
             type: 'cursorMove',
             payload: { x: e.clientX, y: e.clientY }
           });
-      
         }
       }
     }
@@ -447,13 +448,27 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       y: updates.y !== undefined ? Number(updates.y) : undefined
     };
     
+    // Update locally
     updateElement(id, validatedUpdates);
-  
-    // Send update to peers
+    
+    // CRITICAL: Always send to peers, even during dragging
     if (isConnected && sendMessage) {
-      const updatedElement = currentCanvas?.elements.find(el => el.id === id);
-      if (updatedElement) {
-        console.log('Broadcasting element update to peers:', { id, ...validatedUpdates });
+      // Add a throttled broadcast to avoid overwhelming the network during dragging
+      if (isDragging) {
+        // Use requestAnimationFrame to throttle updates during drag operations
+        requestAnimationFrame(() => {
+          console.log('Broadcasting element position update:', id, validatedUpdates);
+          sendMessage({
+            type: 'canvasOperation',
+            payload: {
+              operation: 'update',
+              element: { id, ...validatedUpdates }
+            }
+          });
+        });
+      } else {
+        // For non-dragging updates, send immediately
+        console.log('Broadcasting element update:', id, validatedUpdates);
         sendMessage({
           type: 'canvasOperation',
           payload: {
@@ -488,7 +503,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   };
 
   // Create a handleAddElement function that handles both local add and peer sync
-  // Add this after your handleDeleteElement function (around line 482)
   const handleAddElement = (element: Omit<CanvasElementType, 'id'>) => {
     // Ensure coordinates are valid numbers
     const validatedElement = {
@@ -497,20 +511,22 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       y: typeof element.y === 'number' ? element.y : 0
     };
     
-    // Add element locally
+    // Add element locally with a guaranteed unique ID
     const newElementWithId = addElement(validatedElement);
     
-    // Send to connected peers if any
-    if (isConnected && sendMessage) {
-      console.log('Broadcasting new element to peers:', newElementWithId);
-      sendMessage({
-        type: 'canvasOperation',
-        payload: {
-          operation: 'add',
-          element: newElementWithId
-        }
-      });
-    }
+    // Send to connected peers after a small delay to ensure local processing completes
+    setTimeout(() => {
+      if (isConnected && sendMessage) {
+        console.log('Broadcasting new element to peers:', newElementWithId);
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newElementWithId
+          }
+        });
+      }
+    }, 50);
     
     return newElementWithId;
   };
@@ -654,6 +670,46 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCanvas, scale, viewportPosition]);
+
+  // Add this to your CanvasEditor component
+  useEffect(() => {
+    if (!isConnected || !registerHandler) return;
+    
+    // More comprehensive debug handler for real-time updates
+    const unregisterUpdateHandler = registerHandler('canvasUpdate', (payload) => {
+      console.log(`DEBUG: Canvas operation received in editor: ${payload.operation}`, payload);
+      
+      // Handle direct updates from peers
+      if (currentCanvas && payload.operation === 'add' && payload.element) {
+        const elementToAdd = {
+          ...payload.element,
+          id: payload.element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+        };
+        
+        // Check if element already exists
+        const elementExists = currentCanvas.elements.some(el => el.id === elementToAdd.id);
+        if (!elementExists) {
+          // Real-time update directly in the editor
+          setCurrentCanvas(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              elements: [...prev.elements, elementToAdd]
+            };
+          });
+          
+          toast.success('Collaborator added a new element', {
+            position: 'bottom-right',
+            duration: 2000
+          });
+        }
+      }
+    });
+    
+    return () => {
+      unregisterUpdateHandler();
+    };
+  }, [isConnected, registerHandler, currentCanvas, setCurrentCanvas]);
 
   // Add this to your CanvasEditor component
   useEffect(() => {

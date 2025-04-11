@@ -250,21 +250,36 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Update the handleMessage function
   const handleMessage = useCallback((type: string, payload: any) => {
     // Create a message ID based on content for deduplication
-    const messageId = `${type}-${JSON.stringify(payload)?.slice(0, 50)}-${Date.now().toString().slice(-6)}`;
+    let messageId;
+  
+    if (type === 'canvasUpdate' && payload?.operation === 'update' && payload?.element) {
+      // Include the actual position values in the ID to ensure each position gets processed
+      const uniqueTime = Date.now() + Math.random();
+      messageId = `${type}-${payload.operation}-${payload.element.id}-${payload.element.x}-${payload.element.y}-${uniqueTime}`;
+      
+      // NEVER skip updates - bypass deduplication entirely
+      if (messageHandlers[type]) {
+        messageHandlers[type].forEach(handler => handler(payload));
+      }
+      return; // Skip the rest of the function for updates
+    } else {
+      // For non-update messages, use the regular approach
+      messageId = `${type}-${JSON.stringify(payload)?.slice(0, 50)}-${Date.now().toString().slice(-6)}`;
+    }
     
-    // Skip if we've seen this message recently
+    // Deduplication for non-update messages only
     if (processedMessages.current.has(messageId)) {
       console.log('Skipping duplicate message:', type);
       return;
     }
     
-    // Add to processed set and remove after a timeout
+    console.log(`Processing message type: ${type} with ID: ${messageId}`);
+    
+    // Add to processed set with timeout
     processedMessages.current.add(messageId);
     setTimeout(() => {
       processedMessages.current.delete(messageId);
     }, 1000);
-    
-    console.log(`Processing message type: ${type} with ID: ${messageId}`);
     
     // Process the message
     if (messageHandlers[type]) {
@@ -977,34 +992,48 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Add a handler for canvas operations - just ONE implementation
     const unregisterCanvasOperation = registerHandler('canvasOperation', (payload) => {
       // Check for duplicate messages (common issue)
-      const messageId = `${payload.operation}-${payload.element?.id || payload.elementId}-${Date.now()}`;
+      //const messageId = `${payload.operation}-${payload.element?.id || payload.elementId}-${Date.now()}`;
+      //
+      //// Simple deduplication with our ref instead of window global
+      //if (processedOperationMessages.current.has(messageId)) {
+      //  console.log('Skipping duplicate message:', messageId);
+      //  return;
+      //}
+      //
+      //// Add to processed messages
+      //processedOperationMessages.current.add(messageId);
+      //
+      //// Clean up old messages (prevent memory leak)
+      //setTimeout(() => {
+      //  processedOperationMessages.current.delete(messageId);
+      //}, 5000);
       
-      // Simple deduplication with our ref instead of window global
-      if (processedOperationMessages.current.has(messageId)) {
-        console.log('Skipping duplicate message:', messageId);
-        return;
-      }
-      
-      // Add to processed messages
-      processedOperationMessages.current.add(messageId);
-      
-      // Clean up old messages (prevent memory leak)
-      setTimeout(() => {
-        processedOperationMessages.current.delete(messageId);
-      }, 5000);
-      
-      console.log('Processing canvas operation:', payload);
+      //console.log('Processing canvas operation from peer:', payload);
       
       if (!payload || !payload.operation) {
         console.error('Invalid canvas operation received');
         return;
       }
       
+      // Get latest canvas data from localStorage to ensure we have the most up-to-date version
+      let currentCanvasData = currentCanvas;
+      try {
+        const pendingCanvas = localStorage.getItem('pendingCanvasState');
+        if (pendingCanvas) {
+          const parsedCanvas = JSON.parse(pendingCanvas);
+          if (parsedCanvas && parsedCanvas.elements) {
+            currentCanvasData = parsedCanvas;
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing canvas data:', error);
+      }
+      
       // IMPORTANT: Process directly here instead of just forwarding
-      if (currentCanvas && payload.operation === 'add' && payload.element) {
+      if (currentCanvasData && payload.operation === 'add' && payload.element) {
         try {
           // Make a deep copy to avoid mutation issues
-          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvas));
+          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvasData));
           
           // Ensure the element has an ID to avoid duplication
           const elementToAdd = {
@@ -1012,52 +1041,68 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             id: payload.element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
           };
           
-          // Add the new element to our canvas copy
-          updatedCanvas.elements.push(elementToAdd);
-          console.log(`Adding element ${elementToAdd.id} directly to canvas, now has ${updatedCanvas.elements.length} elements`);
-          
-          // Update the canvas state with our modified copy
-          setCurrentCanvas(updatedCanvas);
-          
-          // Also update localStorage for persistence
-          localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
-          
-          // Show a notification that a new element was added
-          toast.success('New element added by collaborator');
-        } catch (error) {
-          console.error('Error processing add operation:', error);
-        }
-      } else if (currentCanvas && payload.operation === 'update' && payload.element && payload.element.id) {
-        try {
-          // Make a deep copy to avoid mutation issues
-          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvas));
-          
-          // Find and update the element
-          const index = updatedCanvas.elements.findIndex((el: any) => el.id === payload.element.id);
-          if (index !== -1) {
-            updatedCanvas.elements[index] = {
-              ...updatedCanvas.elements[index],
-              ...payload.element
-            };
-            console.log(`Updated element ${payload.element.id} directly in canvas`);
+          // Check if element with this ID already exists to avoid duplicates
+          const elementExists = updatedCanvas.elements.some((el: any) => el.id === elementToAdd.id);
+          if (!elementExists) {
+            // Add the new element to our canvas copy
+            updatedCanvas.elements.push(elementToAdd);
+            console.log(`Adding element ${elementToAdd.id} from peer to canvas, now has ${updatedCanvas.elements.length} elements`);
             
             // Update the canvas state with our modified copy
             setCurrentCanvas(updatedCanvas);
             
             // Also update localStorage for persistence
             localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+            
+            // Show a notification that a new element was added
+            toast.success('New element added by collaborator');
+          } else {
+            console.log(`Element ${elementToAdd.id} already exists, skipping`);
           }
         } catch (error) {
-          console.error('Error processing update operation:', error);
+          console.error('Error processing add operation:', error);
         }
-      } else if (currentCanvas && payload.operation === 'delete' && payload.elementId) {
+      } else if (payload.operation === 'update' && payload.element) {
+    const enhancedPayload = {
+      ...payload,
+      element: {
+        ...payload.element,
+        _updateTime: Date.now() + Math.random()  // Add unique timestamp
+      }
+    };
+    
+    // Always apply the update directly to ensure it's processed
+    setCurrentCanvas(prevCanvas => {
+      if (!prevCanvas) return prevCanvas;
+      
+      const updatedElements = prevCanvas.elements.map(el =>
+        el.id === payload.element.id ? { ...el, ...payload.element } : el
+      );
+      
+      // Update localStorage immediately for persistence
+      try {
+        const updatedCanvas = { ...prevCanvas, elements: updatedElements };
+        localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+      } catch (err) {
+        console.error('Error updating localStorage:', err);
+      }
+      
+      return { ...prevCanvas, elements: updatedElements };
+    });
+    
+    // Forward to all handlers including ContextBridge
+    handleMessage('canvasUpdate', enhancedPayload);
+    
+    return; // Skip the rest of processing
+        
+      } else if (currentCanvasData && payload.operation === 'delete' && payload.elementId) {
         try {
           // Make a deep copy to avoid mutation issues
-          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvas));
+          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvasData));
           
           // Filter out the deleted element
           updatedCanvas.elements = updatedCanvas.elements.filter((el: any) => el.id !== payload.elementId);
-          console.log(`Deleted element ${payload.elementId} directly from canvas`);
+          console.log(`Deleted element ${payload.elementId} from peer in canvas`);
           
           // Update the canvas state with our modified copy
           setCurrentCanvas(updatedCanvas);
@@ -1072,7 +1117,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Also forward to ContextBridge for UI updates
       // This is important as the UI might need to respond to these changes
       handleMessage('canvasUpdate', payload);
-    
+
       // Propagate to other connected peers (mesh network)
       // But only if we didn't receive it from another peer (avoid loops)
       connections.forEach(conn => {
