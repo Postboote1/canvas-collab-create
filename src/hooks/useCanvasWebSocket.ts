@@ -1,3 +1,4 @@
+
 import { useEffect } from 'react';
 import { useCanvas } from '../contexts/CanvasContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
@@ -10,37 +11,53 @@ export const useCanvasWebSocket = () => {
   useEffect(() => {
     if (!registerHandler) return;
 
-    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
-      if (!payload) return;
-      
-      setCurrentCanvas({
-        id: payload.id,
-        name: payload.name || 'Shared Canvas',
-        elements: payload.elements || [],
-        createdBy: 'shared',
-        createdAt: new Date().toISOString(),
-        joinCode: payload.joinCode || '',
-        isInfinite: payload.isInfinite || true
-      });
-    });
-
-    const unregisterRequestState = registerHandler('requestCanvasState', () => {
+    // Handle canvas state requests from other peers
+    const unregisterRequestState = registerHandler('requestCanvasState', (payload) => {
       if (!currentCanvas || !sendMessage) return;
       
+      console.log('Received request for canvas state, sending full canvas data');
+      
+      // Send the complete canvas state in response
       sendMessage({
         type: 'canvasState',
         payload: {
           id: currentCanvas.id,
           name: currentCanvas.name,
           elements: currentCanvas.elements,
+          createdBy: currentCanvas.createdBy,
+          createdAt: currentCanvas.createdAt,
+          joinCode: currentCanvas.joinCode,
           isInfinite: currentCanvas.isInfinite
         }
       });
     });
 
+    // Handle incoming canvas state updates
+    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
+      if (!payload || !payload.elements) {
+        console.error('Received invalid canvas state');
+        return;
+      }
+      
+      console.log(`Received complete canvas state with ${payload.elements.length} elements`);
+      
+      // Set the full canvas state
+      setCurrentCanvas(prev => {
+        if (!prev) return prev;
+        
+        return {
+          ...prev,
+          id: payload.id || prev.id,
+          name: payload.name || prev.name,
+          elements: payload.elements || [],
+          isInfinite: payload.isInfinite !== undefined ? payload.isInfinite : prev.isInfinite
+        };
+      });
+    });
+
     return () => {
-      unregisterCanvasState();
       unregisterRequestState();
+      unregisterCanvasState();
     };
   }, [registerHandler, currentCanvas, sendMessage, setCurrentCanvas]);
 
