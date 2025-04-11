@@ -1,5 +1,5 @@
 // src/components/canvas/CanvasEditor.tsx
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, ChangeEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
@@ -536,6 +536,60 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
 
+  // Add the missing handleImageUpload function
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0] || readOnly) return;
+    
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = (event) => {
+      if (!event.target || !event.target.result) return;
+
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      // Position the image at the center of the current viewport
+      const x = viewportPosition.x + rect.width / (2 * scale);
+      const y = viewportPosition.y + rect.height / (2 * scale);
+
+      const newImage: Omit<CanvasElementType, 'id'> = {
+        type: 'image',
+        src: event.target.result.toString(),
+        x,
+        y,
+        width: 300, // Default width
+        height: 200, // Default height or will be adjusted to aspect ratio
+      };
+
+      // Add element locally
+      const newElement = addElement(newImage);
+      
+      toast.success('Image added', {
+        position: 'bottom-center',
+      });
+
+      // Broadcast to peers
+      if (isConnected && sendMessage) {
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newElement
+          }
+        });
+      }
+
+      // Reset tool after adding image
+      setActiveTool('select');
+    };
+    
+    reader.readAsDataURL(file);
+    
+    // Reset the input value so the same file can be uploaded again
+    e.target.value = '';
+  };
+
   // Add this to your CanvasEditor component
   useEffect(() => {
     if (!isConnected) return;
@@ -669,7 +723,5 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     </div>
   );
 };
-
-
 
 export default CanvasEditor;
