@@ -84,9 +84,24 @@ export const useCanvasWebSocket = () => {
       });
     });
 
+    // Add a handler for individual canvas operations
+    const unregisterCanvasOperation = registerHandler('canvasOperation', (payload) => {
+      if (!payload || !payload.operation) {
+        console.error('Received invalid canvas operation');
+        return;
+      }
+      
+      // This log is useful for debugging
+      console.log(`Received canvas operation: ${payload.operation}`, payload);
+      
+      // Operations are processed by the ContextBridge
+      // This handler is just for debugging and completeness
+    });
+
     return () => {
       unregisterRequestState();
       unregisterCanvasState();
+      unregisterCanvasOperation();
     };
   }, [registerHandler, currentCanvas, sendMessage, setCurrentCanvas]);
 

@@ -8,6 +8,7 @@ import CanvasElement from './CanvasElement';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { useCanvasWebSocket } from '@/hooks/useCanvasWebSocket';
 
 interface CanvasEditorProps {
   readOnly?: boolean;
@@ -17,6 +18,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler } = useWebSocket();
+  const { requestCanvasState } = useCanvasWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -37,18 +39,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   // Request initial canvas state when connected
   useEffect(() => {
-    if (isConnected && !hasSentInitialRequest && currentCanvas && sendMessage) {
+    if (isConnected && !hasSentInitialRequest && currentCanvas) {
       console.log('Connecting to canvas with join code:', currentCanvas.joinCode);
       
-      // Request full canvas state from peers
-      sendMessage({
-        type: 'requestCanvasState',
-        payload: { canvasId: currentCanvas.id }
-      });
+      // Request full canvas state from peers using the dedicated hook
+      requestCanvasState();
       
       setHasSentInitialRequest(true);
     }
-  }, [isConnected, currentCanvas, sendMessage, hasSentInitialRequest]);
+  }, [isConnected, currentCanvas, requestCanvasState, hasSentInitialRequest]);
 
   // Auto-save every 30 seconds
   useEffect(() => {
@@ -536,7 +535,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
   };
 
-  // Add the missing handleImageUpload function
+  // Fixed handleImageUpload function 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || readOnly) return;
     
@@ -553,9 +552,10 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       const x = viewportPosition.x + rect.width / (2 * scale);
       const y = viewportPosition.y + rect.height / (2 * scale);
 
+      // Fixed: Use imageUrl instead of src to match the CanvasElement type
       const newImage: Omit<CanvasElementType, 'id'> = {
         type: 'image',
-        src: event.target.result.toString(),
+        imageUrl: event.target.result.toString(),
         x,
         y,
         width: 300, // Default width
