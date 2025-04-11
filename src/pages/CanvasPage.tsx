@@ -29,6 +29,26 @@ const CanvasPage: React.FC = () => {
     }
   }, [currentCanvas, navigate]);
 
+  useEffect(() => {
+    const handleCanvasUpdate = (e: Event) => {
+      try {
+        const pendingCanvasStr = localStorage.getItem('pendingCanvasState');
+        if (pendingCanvasStr) {
+          const canvasData = JSON.parse(pendingCanvasStr);
+          console.log('Force updating canvas from localStorage after element update');
+          setCurrentCanvas(canvasData);
+        }
+      } catch (error) {
+        console.error('Error loading canvas during forced update:', error);
+      }
+    };
+  
+    window.addEventListener('canvas-update', handleCanvasUpdate);
+    return () => {
+      window.removeEventListener('canvas-update', handleCanvasUpdate);
+    };
+  }, [setCurrentCanvas]);
+
   // Update the useEffect that loads the pending canvas
   useEffect(() => {
     // Don't declare state hooks inside useEffect

@@ -250,36 +250,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Update the handleMessage function
   const handleMessage = useCallback((type: string, payload: any) => {
     // Create a message ID based on content for deduplication
-    let messageId;
-  
-    if (type === 'canvasUpdate' && payload?.operation === 'update' && payload?.element) {
-      // Include the actual position values in the ID to ensure each position gets processed
-      const uniqueTime = Date.now() + Math.random();
-      messageId = `${type}-${payload.operation}-${payload.element.id}-${payload.element.x}-${payload.element.y}-${uniqueTime}`;
-      
-      // NEVER skip updates - bypass deduplication entirely
-      if (messageHandlers[type]) {
-        messageHandlers[type].forEach(handler => handler(payload));
-      }
-      return; // Skip the rest of the function for updates
-    } else {
-      // For non-update messages, use the regular approach
-      messageId = `${type}-${JSON.stringify(payload)?.slice(0, 50)}-${Date.now().toString().slice(-6)}`;
-    }
+    const messageId = `${type}-${JSON.stringify(payload)?.slice(0, 50)}-${Date.now().toString().slice(-6)}`;
     
-    // Deduplication for non-update messages only
+    // Skip if we've seen this message recently
     if (processedMessages.current.has(messageId)) {
       console.log('Skipping duplicate message:', type);
       return;
     }
     
-    console.log(`Processing message type: ${type} with ID: ${messageId}`);
-    
-    // Add to processed set with timeout
+    // Add to processed set and remove after a timeout
     processedMessages.current.add(messageId);
     setTimeout(() => {
       processedMessages.current.delete(messageId);
     }, 1000);
+    
+    console.log(`Processing message type: ${type} with ID: ${messageId}`);
     
     // Process the message
     if (messageHandlers[type]) {
@@ -309,49 +294,58 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         
         console.log('Received data:', data);
         
-        // Handle canvasOperation messages
-        if (data?.type === 'canvasOperation' && data.payload) {
-          console.log('Received canvas operation directly:', data.payload);
+        // CRITICAL FIX: Special direct handling for element updates
+        if (data?.type === 'canvasOperation' && 
+          data?.payload?.operation === 'update' && 
+          data?.payload?.element?.id) {
+        
+        console.log('DIRECT UPDATE HANDLER: Applying position update for element:', data.payload.element.id);
+        
+        setCurrentCanvas(prevCanvas => {
+          if (!prevCanvas) return prevCanvas;
           
-          // Forward to the canvasUpdate handler to update the canvas
-          // But DON'T update currentCanvas directly here - let the handler do it
-          handleMessage('canvasUpdate', data.payload);
-
-          // Relay to other connections to ensure full mesh network
-          connections.forEach(otherConn => {
-            if (otherConn.peer !== conn.peer && otherConn.open) {
-              otherConn.send(data);
-            }
+          // Find and update the element with proper type conversion
+          const updatedElements = prevCanvas.elements.map(el => 
+            el.id === data.payload.element.id ? { 
+              ...el, 
+              // Always convert coordinates to numbers
+              x: typeof data.payload.element.x === 'number' ? data.payload.element.x : 
+                 (data.payload.element.x !== undefined ? Number(data.payload.element.x) : el.x),
+              y: typeof data.payload.element.y === 'number' ? data.payload.element.y : 
+                 (data.payload.element.y !== undefined ? Number(data.payload.element.y) : el.y),
+              // Copy all other properties
+              ...data.payload.element
+            } : el
+          );
+          
+          // Create new canvas state with updated elements
+          const updatedCanvas = { ...prevCanvas, elements: updatedElements };
+          
+          // Save to localStorage
+          try {
+            localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+            console.log(`DIRECT UPDATE COMPLETE: Element ${data.payload.element.id} updated to x:${data.payload.element.x}, y:${data.payload.element.y}`);
+            
+            // CRITICAL FIX: Force reload from localStorage in CanvasPage
+            // This ensures all components using the canvas state get updated
+            window.dispatchEvent(new CustomEvent('canvas-update', { 
+              detail: { elementId: data.payload.element.id }
+            }));
+            
+          } catch (err) {
+            console.error('Error updating localStorage:', err);
+          }
+          
+          return updatedCanvas;
           });
-          return;
         }
         
-        // Handle canvasState without updating currentCanvas directly
-        if (data?.type === 'canvasState' && data.payload) {
-          console.log('Received canvas state data directly:', data.payload);
-          
-          // Create a valid canvas object from the payload
-          const canvasData = {
-            id: data.payload.id || `shared-${Date.now()}`,
-            name: data.payload.name || 'Shared Canvas',
-            elements: Array.isArray(data.payload.elements) ? data.payload.elements : [],
-            createdBy: data.payload.createdBy || 'shared',
-            createdAt: data.payload.createdAt || new Date().toISOString(),
-            joinCode: data.payload.joinCode || '',
-            isInfinite: data.payload.isInfinite === undefined ? true : data.payload.isInfinite
-          };
-          
-          // Store in local storage for persistence but don't set state directly here
-          localStorage.setItem('pendingCanvasState', JSON.stringify(canvasData));
-          setCanvasStateSynced(true);
-        }
-        
-        // Forward to message handler system
-        if (data?.type) {
+        // Continue with the existing message handler for other message types
+        if (data && data.type) {
           handleMessage(data.type, data.payload);
         }
       } catch (error) {
-        console.error('Error handling received data:', error);
+        console.error('Error processing received data:', error);
       }
     });
 
@@ -992,23 +986,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Add a handler for canvas operations - just ONE implementation
     const unregisterCanvasOperation = registerHandler('canvasOperation', (payload) => {
       // Check for duplicate messages (common issue)
-      //const messageId = `${payload.operation}-${payload.element?.id || payload.elementId}-${Date.now()}`;
-      //
-      //// Simple deduplication with our ref instead of window global
-      //if (processedOperationMessages.current.has(messageId)) {
-      //  console.log('Skipping duplicate message:', messageId);
-      //  return;
-      //}
-      //
-      //// Add to processed messages
-      //processedOperationMessages.current.add(messageId);
-      //
-      //// Clean up old messages (prevent memory leak)
-      //setTimeout(() => {
-      //  processedOperationMessages.current.delete(messageId);
-      //}, 5000);
+      const messageId = `${payload.operation}-${payload.element?.id || payload.elementId}-${Date.now()}`;
       
-      //console.log('Processing canvas operation from peer:', payload);
+      // Simple deduplication with our ref instead of window global
+      if (processedOperationMessages.current.has(messageId)) {
+        console.log('Skipping duplicate message:', messageId);
+        return;
+      }
+      
+      // Add to processed messages
+      processedOperationMessages.current.add(messageId);
+      
+      // Clean up old messages (prevent memory leak)
+      setTimeout(() => {
+        processedOperationMessages.current.delete(messageId);
+      }, 5000);
+      
+      console.log('Processing canvas operation from peer:', payload);
       
       if (!payload || !payload.operation) {
         console.error('Invalid canvas operation received');
@@ -1062,39 +1056,42 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } catch (error) {
           console.error('Error processing add operation:', error);
         }
-      } else if (payload.operation === 'update' && payload.element) {
-    const enhancedPayload = {
-      ...payload,
-      element: {
-        ...payload.element,
-        _updateTime: Date.now() + Math.random()  // Add unique timestamp
-      }
-    };
+      } else if (currentCanvasData && payload.operation === 'update' && payload.element && payload.element.id) {
+        console.log('DIRECT UPDATE: Applying element update directly:', payload.element.id);
     
-    // Always apply the update directly to ensure it's processed
-    setCurrentCanvas(prevCanvas => {
-      if (!prevCanvas) return prevCanvas;
-      
-      const updatedElements = prevCanvas.elements.map(el =>
-        el.id === payload.element.id ? { ...el, ...payload.element } : el
-      );
-      
-      // Update localStorage immediately for persistence
-      try {
-        const updatedCanvas = { ...prevCanvas, elements: updatedElements };
-        localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
-      } catch (err) {
-        console.error('Error updating localStorage:', err);
-      }
-      
-      return { ...prevCanvas, elements: updatedElements };
-    });
-    
-    // Forward to all handlers including ContextBridge
-    handleMessage('canvasUpdate', enhancedPayload);
-    
-    return; // Skip the rest of processing
-        
+        // Apply the update immediately and directly to the canvas state
+        setCurrentCanvas(prevCanvas => {
+          if (!prevCanvas) return prevCanvas;
+          
+          // Find and update the element with proper type conversion for coordinates
+          const updatedElements = prevCanvas.elements.map(el => 
+            el.id === payload.element.id ? { 
+              ...el, 
+              // Ensure coordinates are properly converted to numbers
+              x: typeof payload.element.x === 'number' ? payload.element.x : 
+                 (payload.element.x !== undefined ? Number(payload.element.x) : el.x),
+              y: typeof payload.element.y === 'number' ? payload.element.y : 
+                 (payload.element.y !== undefined ? Number(payload.element.y) : el.y),
+              // Copy any other updated properties
+              ...payload.element
+            } : el
+          );
+          
+          // Log the update to verify it's happening
+          console.log(`DIRECT UPDATE APPLIED: Element ${payload.element.id} position set to x:${payload.element.x}, y:${payload.element.y}`);
+          
+          // Create new canvas state with updated elements
+          const updatedCanvas = { ...prevCanvas, elements: updatedElements };
+          
+          // Update localStorage for persistence
+          try {
+            localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+          } catch (err) {
+            console.error('Error updating localStorage:', err);
+          }
+          
+          return updatedCanvas;
+          });
       } else if (currentCanvasData && payload.operation === 'delete' && payload.elementId) {
         try {
           // Make a deep copy to avoid mutation issues
