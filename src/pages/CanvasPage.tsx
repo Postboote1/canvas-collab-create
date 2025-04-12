@@ -49,6 +49,35 @@ const CanvasPage: React.FC = () => {
     };
   }, [setCurrentCanvas]);
 
+  useEffect(() => {
+    const handleForceRefresh = (event) => {
+      console.log("Force refresh event received:", event.detail);
+      try {
+        // Wait a brief moment to ensure all operations are complete
+        setTimeout(() => {
+          // Load the latest canvas data from localStorage
+          const pendingCanvasStr = localStorage.getItem('pendingCanvasState');
+          if (pendingCanvasStr) {
+            const canvasData = JSON.parse(pendingCanvasStr);
+            
+            // Force update the canvas context
+            setCurrentCanvas(canvasData);
+            
+            // Log the change for debugging
+            console.log(`Canvas refreshed after ${event.detail.operation} operation. Elements: ${canvasData.elements.length}`);
+          }
+        }, 50);
+      } catch (error) {
+        console.error('Error during forced canvas refresh:', error);
+      }
+    };
+  
+    window.addEventListener('force-canvas-refresh', handleForceRefresh);
+    return () => {
+      window.removeEventListener('force-canvas-refresh', handleForceRefresh);
+    };
+  }, [setCurrentCanvas]);
+
   // Update the useEffect that loads the pending canvas
   useEffect(() => {
     // Don't declare state hooks inside useEffect

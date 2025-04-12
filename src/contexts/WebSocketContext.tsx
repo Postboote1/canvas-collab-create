@@ -303,9 +303,49 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
         
         console.log('Received data:', data);
-        
-        // CRITICAL FIX: Special direct handling for element updates
         if (data?.type === 'canvasOperation' && 
+          data?.payload?.operation === 'delete' && 
+          data?.payload?.elementId) {
+        
+        console.log('DIRECT DELETE HANDLER: Processing deletion for element:', data.payload.elementId);
+        
+        setCurrentCanvas(prevCanvas => {
+          if (!prevCanvas) return prevCanvas;
+          
+          // Only process if the element exists
+          const elementExists = prevCanvas.elements.some(el => el.id === data.payload.elementId);
+          if (!elementExists) {
+            console.log(`Element ${data.payload.elementId} not found in canvas, skipping deletion`);
+            return prevCanvas;
+          }
+          
+          // Create new canvas state without the deleted element
+          const updatedCanvas = {
+            ...prevCanvas,
+            elements: prevCanvas.elements.filter(el => el.id !== data.payload.elementId)
+          };
+          
+          // Log what happened
+          console.log(`DIRECT DELETE: Removed element ${data.payload.elementId}, elements: ${prevCanvas.elements.length} → ${updatedCanvas.elements.length}`);
+          
+          // Save to localStorage
+          try {
+            localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+            
+            // Use the same event type as your update handler for consistency
+            window.dispatchEvent(new CustomEvent('canvas-update', { 
+              detail: { operation: 'delete', elementId: data.payload.elementId }
+            }));
+            
+          } catch (err) {
+            console.error('Error updating localStorage during delete:', err);
+          }
+          
+          return updatedCanvas;
+        });
+      }
+        // CRITICAL FIX: Special direct handling for element updates
+      else if (data?.type === 'canvasOperation' && 
           data?.payload?.operation === 'update' && 
           data?.payload?.element?.id) {
         
@@ -1178,18 +1218,39 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       } else if (currentCanvasData && payload.operation === 'delete' && payload.elementId) {
         try {
+          console.log(`PROCESSING DELETE: Removing element ${payload.elementId} from canvas`);
+          
+          // Check if element exists in current canvas
+          const elementExists = currentCanvasData.elements.some((el: any) => el.id === payload.elementId);
+          if (!elementExists) {
+            console.log(`Element ${payload.elementId} not found in canvas, already deleted`);
+            return;
+          }
+          
           // Make a deep copy to avoid mutation issues
           const updatedCanvas = JSON.parse(JSON.stringify(currentCanvasData));
           
           // Filter out the deleted element
+          const originalLength = updatedCanvas.elements.length;
           updatedCanvas.elements = updatedCanvas.elements.filter((el: any) => el.id !== payload.elementId);
-          console.log(`Deleted element ${payload.elementId} from peer in canvas`);
           
-          // Update the canvas state with our modified copy
+          console.log(`Deleted element ${payload.elementId} from canvas, removed ${originalLength - updatedCanvas.elements.length} elements`);
+          
+          // Update the canvas state with our modified copy - IMPORTANT for UI update
           setCurrentCanvas(updatedCanvas);
           
           // Also update localStorage for persistence
           localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+          
+          // Force a UI update with a stronger mechanism
+          window.dispatchEvent(new CustomEvent('force-canvas-refresh', {
+            detail: { operation: 'delete', elementId: payload.elementId, timestamp: Date.now() }
+          }));
+          
+          // Also send a more direct notification using toast
+          toast.info(`Element ${payload.elementId.substring(0, 8)}... was deleted`, {
+            duration: 3000
+          });
         } catch (error) {
           console.error('Error processing delete operation:', error);
         }

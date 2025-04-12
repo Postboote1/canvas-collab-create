@@ -181,12 +181,8 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
             if (payload.elementId) {
               console.log('Deleting element from remote:', payload.elementId);
               
-              // Find the element
-              const elementExists = canvas.elements.some(el => el.id === payload.elementId);
-              if (!elementExists) {
-                console.warn(`Element ${payload.elementId} not found for deletion in ContextBridge`);
-                return;
-              }
+              // Always process delete operations, even if element isn't found
+              // This ensures consistency when elements are deleted
               
               // Create a new canvas object without the deleted element
               const updatedCanvas = {
@@ -194,13 +190,18 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
                 elements: canvas.elements.filter(el => el.id !== payload.elementId)
               };
               
-              // Update the local state
+              // Log if we actually removed anything
+              if (updatedCanvas.elements.length < canvas.elements.length) {
+                console.log(`Element ${payload.elementId} removed from canvas, elements: ${canvas.elements.length} → ${updatedCanvas.elements.length}`);
+              } else {
+                console.log(`Element ${payload.elementId} not found, but updating canvas anyway`);
+              }
+              
+              // Update the local state regardless, to ensure consistency
               setCurrentCanvas(updatedCanvas);
               
               // Also update localStorage for persistence
               localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
-              
-              console.log(`Element ${payload.elementId} deleted`);
               
               toast.success('Element deleted by collaborator', {
                 position: 'bottom-right',
