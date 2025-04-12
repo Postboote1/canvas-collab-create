@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -47,10 +46,8 @@ const CreateTempCanvasPage: React.FC = () => {
     
     setIsLoading(true);
     try {
-      if (createTempCanvas) {
-        await createTempCanvas(name.trim(), isInfinite);
-        navigate('/canvas');
-      }
+      const canvas = await createTempCanvas(name.trim(), isInfinite);
+      navigate('/canvas');
     } catch (error) {
       console.error('Error creating canvas:', error);
     } finally {
