@@ -1,5 +1,4 @@
 
-// @allowedFileUpdate src/App.tsx
 import { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';

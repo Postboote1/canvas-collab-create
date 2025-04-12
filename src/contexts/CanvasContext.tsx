@@ -60,7 +60,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentCanvas(prevCanvas =>
       prevCanvas ? { ...prevCanvas, elements: [...prevCanvas.elements, newElement] } : { id: uuidv4(), name: 'New Canvas', elements: [newElement] }
     );
-  }, [currentCanvas, setCurrentCanvas]);
+  }, [currentCanvas]);
 
   const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
     setCurrentCanvas(prevCanvas => {
@@ -72,7 +72,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       return { ...prevCanvas, elements: updatedElements };
     });
-  }, [setCurrentCanvas]);
+  }, []);
 
   const deleteElement = useCallback((id: string) => {
     setCurrentCanvas(prevCanvas => {
@@ -81,14 +81,14 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const updatedElements = prevCanvas.elements.filter(element => element.id !== id);
       return { ...prevCanvas, elements: updatedElements };
     });
-  }, [setCurrentCanvas]);
+  }, []);
 
   const clearCanvas = useCallback(() => {
     setCurrentCanvas(prevCanvas => {
       if (!prevCanvas) return prevCanvas;
       return { ...prevCanvas, elements: [] };
     });
-  }, [setCurrentCanvas]);
+  }, []);
 
   // Mock implementation for saveCurrentCanvasToAccount
   const saveCurrentCanvasToAccount = useCallback(async () => {

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { toast } from 'sonner';
 
 const CanvasPage: React.FC = () => {
   const { currentCanvas, setCurrentCanvas, saveCurrentCanvasToAccount } = useCanvas();
-  const { user, isLoggedIn } = useAuth();
+  const { isLoggedIn } = useAuth();
   const { isConnected } = useWebSocket();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
@@ -137,7 +138,7 @@ const CanvasPage: React.FC = () => {
   const isAnonymous = currentCanvas.createdBy === 'anonymous';
 
   const handleSaveToAccount = async () => {
-    if (!isLoggedIn()) {
+    if (!isLoggedIn) {
       toast.info('Please log in to save this canvas');
       navigate('/login');
       return;
@@ -152,7 +153,6 @@ const CanvasPage: React.FC = () => {
       setIsSaving(false);
     }
   };
-  
   
   return (
     <ThemeProvider>

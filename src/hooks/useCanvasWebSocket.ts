@@ -11,7 +11,7 @@ export const useCanvasWebSocket = () => {
   useEffect(() => {
     if (!registerHandler) return;
 
-    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
+    const unregisterCanvasState = registerHandler('canvasState', (payload: any) => {
       if (!payload) return;
       
       setCurrentCanvas({
