@@ -719,15 +719,46 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // Start with the original element
             const updatedElement = { ...updatedCanvas.elements[index] };
             
-            // Apply only defined properties
+            // Create a sanitized update payload with no undefined values
+            const sanitizedElementUpdate: {
+              id: string;
+              x?: number;
+              y?: number;
+              width?: number;
+              height?: number;
+              color?: string;
+              content?: string;
+              [key: string]: any;  // Allow for other properties
+            } = { id: message.payload.element.id };
+            
+            
+            // Only include properties that are actually defined
             Object.entries(message.payload.element).forEach(([key, value]) => {
               // Skip ID and undefined/null values
               if (key === 'id' || value === undefined || value === null) return;
               
-              // Handle numeric values properly
+              // For numeric properties, ensure they're valid numbers
               if (['x', 'y', 'width', 'height'].includes(key)) {
-                updatedElement[key] = typeof value === 'number' ? value : Number(value);
+                sanitizedElementUpdate[key] = typeof value === 'number' ? value : Number(value);
               } else {
+                sanitizedElementUpdate[key] = value;
+              }
+            });
+            
+            // IMPORTANT: If we're updating width/height (resize operation) always include the position
+            if ((sanitizedElementUpdate.width || sanitizedElementUpdate.height) && 
+                !sanitizedElementUpdate.x && !sanitizedElementUpdate.y && 
+                typeof updatedElement.x === 'number' && typeof updatedElement.y === 'number') {
+              sanitizedElementUpdate.x = updatedElement.x;
+              sanitizedElementUpdate.y = updatedElement.y;
+            }
+            
+            // Replace original message payload with sanitized version
+            message.payload.element = sanitizedElementUpdate;
+            
+            // Apply only defined properties to local element
+            Object.entries(sanitizedElementUpdate).forEach(([key, value]) => {
+              if (key !== 'id') { // Skip ID
                 updatedElement[key] = value;
               }
             });
