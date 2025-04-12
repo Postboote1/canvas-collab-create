@@ -32,25 +32,26 @@ export type CanvasData = {
 type CanvasContextType = {
   currentCanvas: CanvasData | null;
   setCurrentCanvas: React.Dispatch<React.SetStateAction<CanvasData | null>>;
-  addElement: (element: Omit<CanvasElement, 'id'>) => void;
+  addElement: (element: Omit<CanvasElement, 'id'>) => CanvasElement;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   clearCanvas: () => void;
   saveCurrentCanvasToAccount?: () => Promise<void>;
-  createCanvas?: (name: string) => void;
-  createTempCanvas?: (name: string) => void;
-  loadCanvas?: (id: string) => Promise<void>;
+  createCanvas?: (name: string, isInfinite: boolean) => Promise<CanvasData>;
+  createTempCanvas?: (name: string, isInfinite: boolean) => Promise<CanvasData>;
+  loadCanvas?: (id: string) => Promise<boolean>;
   userCanvases?: CanvasData[];
-  saveCanvas?: (canvas: CanvasData) => Promise<void>;
+  saveCanvas?: () => Promise<void>;
 };
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentCanvas, setCurrentCanvas] = useState<CanvasData | null>(null);
+  const [userCanvases, setUserCanvases] = useState<CanvasData[]>([]);
 
   const addElement = useCallback((element: Omit<CanvasElement, 'id'>) => {
-    if (!currentCanvas) return;
+    if (!currentCanvas) return {} as CanvasElement; // Return empty element as fallback
 
     const newElement: CanvasElement = {
       id: uuidv4(),
@@ -60,6 +61,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentCanvas(prevCanvas =>
       prevCanvas ? { ...prevCanvas, elements: [...prevCanvas.elements, newElement] } : { id: uuidv4(), name: 'New Canvas', elements: [newElement] }
     );
+    
+    return newElement;
   }, [currentCanvas]);
 
   const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
@@ -90,11 +93,60 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, []);
 
-  // Mock implementation for saveCurrentCanvasToAccount
+  // Mock implementations for canvas operations
   const saveCurrentCanvasToAccount = useCallback(async () => {
     console.log('Mock implementation of saveCurrentCanvasToAccount');
     return Promise.resolve();
   }, []);
+
+  const saveCanvas = useCallback(async () => {
+    console.log('Mock implementation of saveCanvas');
+    return Promise.resolve();
+  }, []);
+
+  const createCanvas = useCallback(async (name: string, isInfinite: boolean): Promise<CanvasData> => {
+    console.log(`Creating canvas: ${name}, infinite: ${isInfinite}`);
+    const newCanvas: CanvasData = {
+      id: uuidv4(),
+      name,
+      elements: [],
+      createdBy: 'user',
+      createdAt: new Date().toISOString(),
+      joinCode: `JOIN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      isInfinite
+    };
+    
+    setCurrentCanvas(newCanvas);
+    setUserCanvases(prev => [...prev, newCanvas]);
+    
+    return newCanvas;
+  }, []);
+
+  const createTempCanvas = useCallback(async (name: string, isInfinite: boolean): Promise<CanvasData> => {
+    console.log(`Creating temp canvas: ${name}, infinite: ${isInfinite}`);
+    const newCanvas: CanvasData = {
+      id: uuidv4(),
+      name,
+      elements: [],
+      createdBy: 'anonymous',
+      createdAt: new Date().toISOString(),
+      joinCode: `TEMP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      isInfinite
+    };
+    
+    setCurrentCanvas(newCanvas);
+    
+    return newCanvas;
+  }, []);
+
+  const loadCanvas = useCallback(async (id: string): Promise<boolean> => {
+    const canvas = userCanvases.find(c => c.id === id);
+    if (canvas) {
+      setCurrentCanvas(canvas);
+      return true;
+    }
+    return false;
+  }, [userCanvases]);
 
   const value: CanvasContextType = {
     currentCanvas,
@@ -103,7 +155,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateElement,
     deleteElement,
     clearCanvas,
-    saveCurrentCanvasToAccount
+    saveCurrentCanvasToAccount,
+    createCanvas,
+    createTempCanvas,
+    loadCanvas,
+    userCanvases,
+    saveCanvas
   };
 
   return (

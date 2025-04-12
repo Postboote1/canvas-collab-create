@@ -15,7 +15,7 @@ const DashboardPage: React.FC = () => {
   
   // Redirect if not logged in
   useEffect(() => {
-    if (!isLoggedIn()) {
+    if (!isLoggedIn) {
       navigate('/login');
     }
   }, [isLoggedIn, navigate]);
@@ -25,11 +25,13 @@ const DashboardPage: React.FC = () => {
   };
   
   const handleOpenCanvas = async (id: string) => {
-    const success = await loadCanvas(id);
-    if (success) {
-      navigate('/canvas');
-    } else {
-      toast.error('Failed to load canvas');
+    if (loadCanvas) {
+      const success = await loadCanvas(id);
+      if (success) {
+        navigate('/canvas');
+      } else {
+        toast.error('Failed to load canvas');
+      }
     }
   };
   
@@ -56,12 +58,12 @@ const DashboardPage: React.FC = () => {
             <Button
               onClick={handleCreateCanvas}
               className="flex items-center gap-2"
-              disabled={userCanvases.length >= 5}
+              disabled={userCanvases && userCanvases.length >= 5}
             >
               <PlusCircle size={18} />
               Create New Canvas
             </Button>
-            {userCanvases.length >= 5 && (
+            {userCanvases && userCanvases.length >= 5 && (
               <p className="text-sm text-red-500 mt-2">
                 You've reached the limit of 5 canvases.
               </p>
@@ -69,7 +71,7 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
         
-        {userCanvases.length === 0 ? (
+        {!userCanvases || userCanvases.length === 0 ? (
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
             <h2 className="text-xl font-semibold mb-4">You don't have any canvases yet</h2>
             <p className="text-gray-600 mb-6">
@@ -89,7 +91,7 @@ const DashboardPage: React.FC = () => {
                 <div className="p-6">
                   <h3 className="text-xl font-bold mb-2 truncate">{canvas.name}</h3>
                   <p className="text-gray-500 text-sm mb-4">
-                    Created: {formatDate(canvas.createdAt)}
+                    Created: {canvas.createdAt ? formatDate(canvas.createdAt) : 'Unknown date'}
                   </p>
                   <p className="text-gray-600 mb-4">
                     Join Code: <span className="font-mono font-medium">{canvas.joinCode}</span>
@@ -119,7 +121,7 @@ const DashboardPage: React.FC = () => {
             ))}
             
             {/* Card to create new canvas if limit not reached */}
-            {userCanvases.length < 5 && (
+            {userCanvases && userCanvases.length < 5 && (
               <div
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer"
                 onClick={handleCreateCanvas}

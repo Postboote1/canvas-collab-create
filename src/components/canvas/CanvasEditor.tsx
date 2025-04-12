@@ -1,9 +1,9 @@
-
 // src/components/canvas/CanvasEditor.tsx
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
+import { useCanvasWebSocket } from '@/hooks/useCanvasWebSocket';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasElement from './CanvasElement';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas, setCurrentCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler } = useWebSocket();
+  const { sendCanvasOperation } = useCanvasWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond' | 'frame'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -37,7 +38,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   // Auto-save every 30 seconds
   useEffect(() => {
-    if (!readOnly && currentCanvas) {
+    if (!readOnly && currentCanvas && saveCanvas) {
       const interval = setInterval(() => {
         saveCanvas();
       }, 30000);
@@ -45,9 +46,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       return () => clearInterval(interval);
     }
   }, [readOnly, currentCanvas, saveCanvas]);
-
-  // Remove the effect that was auto-connecting to peers
-  // This connection should only happen when the Share button is clicked
 
   // Handle mouse down on canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -771,7 +769,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       <CanvasToolbar
         activeTool={activeTool}
         setActiveTool={setActiveTool}
-        onSave={() => saveCanvas()}
+        onSave={saveCanvas ? () => saveCanvas() : undefined}
         onImageUpload={handleImageUpload}
         readOnly={readOnly}
         scale={scale}
