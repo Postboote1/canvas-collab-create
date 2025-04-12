@@ -714,18 +714,30 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const updatedCanvas = JSON.parse(JSON.stringify(currentCanvas));
           
           // Find and update the element
-          const index = updatedCanvas.elements.findIndex((el: any) => el.id === message.payload.element.id);
+          const index = updatedCanvas.elements.findIndex((el) => el.id === message.payload.element.id);
           if (index !== -1) {
-            updatedCanvas.elements[index] = {
-              ...updatedCanvas.elements[index],
-              ...message.payload.element
-            };
+            // Start with the original element
+            const updatedElement = { ...updatedCanvas.elements[index] };
+            
+            // Apply only defined properties
+            Object.entries(message.payload.element).forEach(([key, value]) => {
+              // Skip ID and undefined/null values
+              if (key === 'id' || value === undefined || value === null) return;
+              
+              // Handle numeric values properly
+              if (['x', 'y', 'width', 'height'].includes(key)) {
+                updatedElement[key] = typeof value === 'number' ? value : Number(value);
+              } else {
+                updatedElement[key] = value;
+              }
+            });
+            
+            // Replace with our updated version
+            updatedCanvas.elements[index] = updatedElement;
             console.log(`Local update: Updated element ${message.payload.element.id} directly in canvas`);
             
-            // Update the canvas state with our modified copy
+            // Update the canvas state and localStorage
             setCurrentCanvas(updatedCanvas);
-            
-            // Also update localStorage for persistence
             localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
           }
         } catch (error) {
@@ -1088,21 +1100,35 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // FOR UPDATE OPERATIONS: Always apply updates directly
       else if (payload.operation === 'update' && payload.element && payload.element.id) {
         try {
-          console.log(`DIRECT UPDATE: Processing position update for ${payload.element.id}`);
+          console.log(`DIRECT UPDATE: Processing update for element ${payload.element.id}`);
           
           // Create updated canvas with the element changes
           const updatedCanvas = {
             ...currentCanvasData,
-            elements: currentCanvasData.elements.map(el => 
-              el.id === payload.element.id ? { 
-                ...el, 
-                x: typeof payload.element.x === 'number' ? payload.element.x : 
-                   (payload.element.x !== undefined ? Number(payload.element.x) : el.x),
-                y: typeof payload.element.y === 'number' ? payload.element.y : 
-                   (payload.element.y !== undefined ? Number(payload.element.y) : el.y),
-                ...payload.element
-              } : el
-            )
+            elements: currentCanvasData.elements.map(el => {
+              if (el.id === payload.element.id) {
+                // Start with the original element to preserve all properties
+                const updatedElement = { ...el };
+                
+                // Only apply properties that are explicitly defined (not undefined or null)
+                Object.entries(payload.element).forEach(([key, value]) => {
+                  // Skip ID and undefined/null values
+                  if (key === 'id' || value === undefined || value === null) return;
+                  
+                  // For coordinates and dimensions, ensure they're proper numbers
+                  if (['x', 'y', 'width', 'height'].includes(key)) {
+                    updatedElement[key] = typeof value === 'number' ? value : Number(value);
+                  } else {
+                    // For other properties (color, text, etc)
+                    updatedElement[key] = value;
+                  }
+                });
+                
+                console.log(`DIRECT UPDATE APPLIED: Element position preserved at x:${updatedElement.x}, y:${updatedElement.y}`);
+                return updatedElement;
+              }
+              return el;
+            })
           };
           
           // Update the canvas state and localStorage
