@@ -1,3 +1,4 @@
+
 // src/components/canvas/CanvasEditor.tsx
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +18,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas, setCurrentCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler } = useWebSocket();
-  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond' | 'frame'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -67,7 +68,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     if (activeTool === 'select') {
       // Check if we're clicking on an element
       const clickedElement = currentCanvas?.elements.find(element => {
-        if (element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') {
+        if (element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape' || element.type === 'frame') {
           return (
             x >= element.x &&
             x <= element.x + (element.width || 0) &&
@@ -151,7 +152,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     } else if (activeTool === 'arrow') {
       // Find element under the cursor
       const element = currentCanvas?.elements.find(el => {
-        if (el.type === 'card' || el.type === 'text' || el.type === 'image' || el.type === 'shape') {
+        if (el.type === 'card' || el.type === 'text' || el.type === 'image' || el.type === 'shape' || el.type === 'frame') {
           return (
             x >= el.x &&
             x <= el.x + (el.width || 0) &&
@@ -174,7 +175,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
               y: 0,
               fromId: startElement.id,
               toId: element.id,
-              color: '#000000' // Default arrow color
+              color: activeColor // Use active color for arrows
             };
 
             addElement(newArrow);
@@ -242,6 +243,33 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           payload: {
             operation: 'add',
             element: newShape
+          }
+        });
+      }
+
+      setActiveTool('select');
+    } else if (activeTool === 'frame') {
+      const newFrame: Omit<CanvasElementType, 'id'> = {
+        type: 'frame',
+        content: 'Frame',
+        x,
+        y,
+        width: 500,
+        height: 350,
+        color: '#9b87f5' // Default frame color
+      };
+
+      addElement(newFrame);
+      toast.success('Frame added', {
+        position: 'bottom-center',
+      });
+
+      if (isConnected) {
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newFrame
           }
         });
       }
@@ -844,7 +872,5 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     </div>
   );
 };
-
-
 
 export default CanvasEditor;
