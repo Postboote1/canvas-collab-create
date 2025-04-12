@@ -9,6 +9,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Palette, Maximize, Trash } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface CanvasElementProps {
   element: ICanvasElement;
@@ -29,6 +30,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   allElements,
   onSelectElement
 }) => {
+  const { theme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeStartPos, setResizeStartPos] = useState({ x: 0, y: 0 });
@@ -85,7 +87,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   }, [isResizing]);
 
   const handleDoubleClick = () => {
-    if (!readOnly && (element.type === 'card' || element.type === 'text')) {
+    if (!readOnly && (element.type === 'card' || element.type === 'text' || element.type === 'frame')) {
       setIsEditing(true);
     }
   };
@@ -218,7 +220,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
           </Popover>
         )}
 
-        {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
+        {(element.type === 'card' || element.type === 'image' || element.type === 'shape' || element.type === 'frame') && (
           <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0" onClick={handleResizeStart}>
             <Maximize size={14} />
             <span className="sr-only">Resize</span>
@@ -298,12 +300,12 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
           {children}
         </ContextMenuTrigger>
         <ContextMenuContent className="w-48">
-          {(element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') && (
+          {(element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape' || element.type === 'frame') && (
             <>
               <ContextMenuItem onClick={() => setShowColorPicker(true)}>
                 Change Color
               </ContextMenuItem>
-              {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
+              {(element.type === 'card' || element.type === 'image' || element.type === 'shape' || element.type === 'frame') && (
                 <ContextMenuItem onClick={handleResizeStart}>
                   Resize
                 </ContextMenuItem>
@@ -353,6 +355,49 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             ) : (
               <div className="w-full h-full overflow-auto whitespace-pre-wrap break-words">
                 {element.content}
+              </div>
+            )}
+            {renderResizeHandle()}
+            {selected && renderControlsMenu()}
+          </div>
+        );
+
+      case 'frame':
+        return renderContextMenu(
+          <div
+            ref={elementRef}
+            className={`absolute rounded-lg ${selected ? 'ring-2 ring-blue-500' : ''}`}
+            style={{
+              left: element.x,
+              top: element.y,
+              width: element.width,
+              height: element.height,
+              border: `2px solid ${element.color || '#9b87f5'}`,
+              backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)',
+              cursor: readOnly ? 'default' : 'move',
+              position: 'absolute',
+              zIndex: 0 // Ensure frames are behind other elements
+            }}
+            onDoubleClick={handleDoubleClick}
+            onMouseDown={(e) => { if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { if (!readOnly) onSelectElement(element.id); }}
+          >
+            {isEditing ? (
+              <div className="absolute -top-6 left-2">
+                <input
+                  type="text"
+                  className="px-2 py-0.5 text-sm border-none focus:outline-none rounded"
+                  style={{ backgroundColor: theme === 'dark' ? '#333' : '#fff', color: element.color || '#9b87f5' }}
+                  value={element.content || 'Frame'}
+                  onChange={(e) => onUpdateElement({ content: e.target.value })}
+                  onBlur={handleBlur}
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="absolute -top-6 left-2 px-2 text-sm"
+                style={{ color: element.color || '#9b87f5' }}>
+                {element.content || 'Frame'}
               </div>
             )}
             {renderResizeHandle()}

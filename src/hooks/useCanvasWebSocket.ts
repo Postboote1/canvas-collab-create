@@ -1,5 +1,6 @@
+
 import { useEffect } from 'react';
-import { useCanvas } from '../contexts/CanvasContext';
+import { useCanvas, CanvasData } from '../contexts/CanvasContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
 
 // Create a separate hook for canvas-websocket integration
@@ -10,15 +11,20 @@ export const useCanvasWebSocket = () => {
   useEffect(() => {
     if (!registerHandler) return;
 
-    const unregisterCanvasState = registerHandler('canvasState', (payload) => {
+    // Store the current canvas state in localStorage whenever it changes
+    if (currentCanvas) {
+      localStorage.setItem('pendingCanvasState', JSON.stringify(currentCanvas));
+    }
+
+    const unregisterCanvasState = registerHandler('canvasState', (payload: any) => {
       if (!payload) return;
       
       setCurrentCanvas({
         id: payload.id,
         name: payload.name || 'Shared Canvas',
         elements: payload.elements || [],
-        createdBy: 'shared',
-        createdAt: new Date().toISOString(),
+        createdBy: payload.createdBy || 'shared',
+        createdAt: payload.createdAt || new Date().toISOString(),
         joinCode: payload.joinCode || '',
         isInfinite: payload.isInfinite || true
       });
