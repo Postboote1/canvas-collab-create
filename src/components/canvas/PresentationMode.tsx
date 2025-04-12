@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useCanvas, CanvasElement } from '@/contexts/CanvasContext';
 import { Button } from '@/components/ui/button';
@@ -124,7 +125,7 @@ const PresentationMode: React.FC = () => {
         
         // Add node to path if it's not just a connector
         const element = currentCanvas.elements.find(el => el.id === startNode);
-        if (element && element.type !== 'connector') {
+        if (element && element.type !== 'arrow') {
           path.push(startNode);
         }
         

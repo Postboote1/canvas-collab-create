@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 
 const CanvasPage: React.FC = () => {
-  const { currentCanvas, saveCurrentCanvasToAccount, setCurrentCanvas } = useCanvas();
+  const { currentCanvas, setCurrentCanvas, saveCurrentCanvasToAccount } = useCanvas();
   const { user, isLoggedIn } = useAuth();
   const { isConnected } = useWebSocket();
   const navigate = useNavigate();
@@ -125,7 +124,7 @@ const CanvasPage: React.FC = () => {
     const intervalId = setInterval(loadPendingCanvas, 2000);
     
     return () => clearInterval(intervalId);
-  }, [currentCanvas, setCurrentCanvas, isConnected, loadAttempts, lastLoadedCanvasId]); // Add new dependencies
+  }, [currentCanvas, setCurrentCanvas, isConnected, loadAttempts, lastLoadedCanvasId]);
   
   if (!currentCanvas) {
     return <div>Loading...</div>;
@@ -146,11 +145,14 @@ const CanvasPage: React.FC = () => {
     
     setIsSaving(true);
     try {
-      await saveCurrentCanvasToAccount();
+      if (saveCurrentCanvasToAccount) {
+        await saveCurrentCanvasToAccount();
+      }
     } finally {
       setIsSaving(false);
     }
   };
+  
   
   return (
     <ThemeProvider>

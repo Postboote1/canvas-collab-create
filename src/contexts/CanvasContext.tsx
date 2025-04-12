@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -18,31 +19,35 @@ export type CanvasElement = {
   shapeType?: 'circle' | 'triangle' | 'diamond';
 };
 
+export type CanvasData = {
+  id: string;
+  name: string;
+  elements: CanvasElement[];
+  createdBy?: string;
+  createdAt?: string;
+  joinCode?: string;
+  isInfinite?: boolean;
+};
+
 type CanvasContextType = {
-  currentCanvas: {
-    id: string;
-    name: string;
-    elements: CanvasElement[];
-  } | null;
-  setCurrentCanvas: React.Dispatch<React.SetStateAction<{
-    id: string;
-    name: string;
-    elements: CanvasElement[];
-  } | null>>;
+  currentCanvas: CanvasData | null;
+  setCurrentCanvas: React.Dispatch<React.SetStateAction<CanvasData | null>>;
   addElement: (element: Omit<CanvasElement, 'id'>) => void;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   clearCanvas: () => void;
+  saveCurrentCanvasToAccount?: () => Promise<void>;
+  createCanvas?: (name: string) => void;
+  createTempCanvas?: (name: string) => void;
+  loadCanvas?: (id: string) => Promise<void>;
+  userCanvases?: CanvasData[];
+  saveCanvas?: (canvas: CanvasData) => Promise<void>;
 };
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentCanvas, setCurrentCanvas] = useState<{
-    id: string;
-    name: string;
-    elements: CanvasElement[];
-  } | null>(null);
+  const [currentCanvas, setCurrentCanvas] = useState<CanvasData | null>(null);
 
   const addElement = useCallback((element: Omit<CanvasElement, 'id'>) => {
     if (!currentCanvas) return;
@@ -85,6 +90,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, [setCurrentCanvas]);
 
+  // Mock implementation for saveCurrentCanvasToAccount
+  const saveCurrentCanvasToAccount = useCallback(async () => {
+    console.log('Mock implementation of saveCurrentCanvasToAccount');
+    return Promise.resolve();
+  }, []);
+
   const value: CanvasContextType = {
     currentCanvas,
     setCurrentCanvas,
@@ -92,6 +103,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateElement,
     deleteElement,
     clearCanvas,
+    saveCurrentCanvasToAccount
   };
 
   return (
