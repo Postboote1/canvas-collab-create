@@ -18,6 +18,12 @@ interface Message {
   payload: any;
 }
 
+declare global {
+  interface Window {
+    processedElementIDs?: Set<string>;
+  }
+}
+
 export interface WebSocketContextType {
   peerId: string | null;
   isConnected: boolean;
@@ -186,11 +192,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   
   // Add persistent peer reference
   const peerRef = useRef<Peer | null>(null);
-
-  // Remove the direct useCanvas call
-  // const { user } = useAuth();
-  
-  // Instead of calling useCanvas directly, create state variables to store canvas info
+  const processedElementIDs = useRef<Set<string>>(new Set());
+  const processedOperations = useRef<Set<string>>(new Set());
+  const addedElementIds = useRef<Set<string>>(new Set());
   const [currentCanvas, setCurrentCanvas] = useState<any>(null);
 
   // DON'T use useCanvas here - it creates a circular dependency
@@ -224,6 +228,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
   }, [peer]);
+
+  useEffect(() => {
+    // Initialize a global element registry in localStorage if it doesn't exist
+    if (!localStorage.getItem('globalElementRegistry')) {
+      localStorage.setItem('globalElementRegistry', JSON.stringify([]));
+    }
+  }, []);
   
   // Register a handler for a specific message type
   const registerHandler = useCallback((type: string, handler: MessageHandler) => {
@@ -243,7 +254,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   
   // Create a reference for deduplication
   const processedMessages = useRef<Set<string>>(new Set());
-  
   // Add another ref specifically for operations
   const processedOperationMessages = useRef<Set<string>>(new Set());
 
@@ -671,33 +681,32 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Process the operation locally first
       if (currentCanvas && message.payload.operation === 'add' && message.payload.element) {
-        try {
-          // Make a deep copy to avoid mutation issues
-          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvas));
-          
-          // Ensure the element has an ID to avoid duplication
-          const elementToAdd = {
-            ...message.payload.element,
-            id: message.payload.element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-          };
-          
-          // Add the new element to our canvas copy
-          updatedCanvas.elements.push(elementToAdd);
-          console.log(`Local add: Adding element ${elementToAdd.id} directly to canvas, now has ${updatedCanvas.elements.length} elements`);
-          
-          // Update the canvas state with our modified copy
-          setCurrentCanvas(updatedCanvas);
-          
-          // Also update localStorage for persistence
-          localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
-          
-          // Update the payload with the generated ID if needed
-          if (elementToAdd.id !== message.payload.element.id) {
-            message.payload.element.id = elementToAdd.id;
+        if (message.payload.operation === 'add' && message.payload.element) {
+          // Ensure the element has an ID
+          if (!message.payload.element.id) {
+            message.payload.element.id = `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
           }
-        } catch (error) {
-          console.error('Error processing local add operation:', error);
+          
+          // Mark this element as processed locally BEFORE processing
+          const elementId = message.payload.element.id;
+          addedElementIds.current.add(elementId);
+          
+          // Also add to global registry
+          const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
+          if (!registry.includes(elementId)) {
+            registry.push(elementId);
+            localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+          }
         }
+        
+        // Add source identification
+        const payloadWithSource = {
+          ...message.payload,
+          source: 'local',
+          deviceId: peerId
+        };
+        
+        handleMessage('canvasUpdate', payloadWithSource);
       } 
       else if (currentCanvas && message.payload.operation === 'update' && message.payload.element && message.payload.element.id) {
         try {
@@ -986,112 +995,130 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Add a handler for canvas operations - just ONE implementation
     const unregisterCanvasOperation = registerHandler('canvasOperation', (payload) => {
       // Check for duplicate messages (common issue)
-      const messageId = `${payload.operation}-${payload.element?.id || payload.elementId}-${Date.now()}`;
-      
-      // Simple deduplication with our ref instead of window global
-      if (processedOperationMessages.current.has(messageId)) {
-        console.log('Skipping duplicate message:', messageId);
-        return;
-      }
-      
-      // Add to processed messages
-      processedOperationMessages.current.add(messageId);
-      
-      // Clean up old messages (prevent memory leak)
-      setTimeout(() => {
-        processedOperationMessages.current.delete(messageId);
-      }, 5000);
-      
       console.log('Processing canvas operation from peer:', payload);
-      
+  
       if (!payload || !payload.operation) {
         console.error('Invalid canvas operation received');
         return;
       }
       
-      // Get latest canvas data from localStorage to ensure we have the most up-to-date version
-      let currentCanvasData = currentCanvas;
+      // Get the latest canvas from localStorage
+      let currentCanvasData;
       try {
         const pendingCanvas = localStorage.getItem('pendingCanvasState');
         if (pendingCanvas) {
-          const parsedCanvas = JSON.parse(pendingCanvas);
-          if (parsedCanvas && parsedCanvas.elements) {
-            currentCanvasData = parsedCanvas;
-          }
+          currentCanvasData = JSON.parse(pendingCanvas);
+        } else if (currentCanvas) {
+          currentCanvasData = currentCanvas;
+        } else {
+          console.error('No canvas data available');
+          return;
         }
       } catch (error) {
-        console.error('Error parsing canvas data:', error);
+        console.error('Error loading canvas data:', error);
+        return;
       }
       
-      // IMPORTANT: Process directly here instead of just forwarding
-      if (currentCanvasData && payload.operation === 'add' && payload.element) {
+      // FOR ADD OPERATIONS: Use the global element registry
+      if (payload.operation === 'add' && payload.element) {
         try {
-          // Make a deep copy to avoid mutation issues
-          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvasData));
+          // Ensure the element has a consistent ID
+          const elementId = payload.element.id || 
+            `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
           
-          // Ensure the element has an ID to avoid duplication
-          const elementToAdd = {
-            ...payload.element,
-            id: payload.element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+          // FIRST DEDUPLICATION CHECK: Check our in-memory set for this session
+          if (addedElementIds.current.has(elementId)) {
+            console.log(`DEDUPLICATION: Element ${elementId} already processed in this session`);
+            return;
+          }
+          
+          // SECOND CHECK: Check the global registry in localStorage
+          const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
+          if (registry.includes(elementId)) {
+            console.log(`GLOBAL REGISTRY: Element ${elementId} already exists, skipping add`);
+            return;
+          }
+          
+          // THIRD CHECK: Verify against current canvas state
+          const elementExists = currentCanvasData.elements.some(el => el.id === elementId);
+          if (elementExists) {
+            console.log(`Element ${elementId} already exists in canvas, adding to tracking`);
+            
+            // Still add to our tracking to prevent future duplicates
+            addedElementIds.current.add(elementId);
+            registry.push(elementId);
+            localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+            return;
+          }
+          
+          // Add to tracking BEFORE adding the element
+          addedElementIds.current.add(elementId);
+          registry.push(elementId);
+          localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+          console.log(`Added element ${elementId} to tracking registries`);
+          
+          // Add the element to the canvas
+          const updatedCanvas = {
+            ...currentCanvasData,
+            elements: [
+              ...currentCanvasData.elements,
+              {
+                ...payload.element,
+                id: elementId,
+                x: typeof payload.element.x === 'number' ? payload.element.x : 0,
+                y: typeof payload.element.y === 'number' ? payload.element.y : 0
+              }
+            ]
           };
           
-          // Check if element with this ID already exists to avoid duplicates
-          const elementExists = updatedCanvas.elements.some((el: any) => el.id === elementToAdd.id);
-          if (!elementExists) {
-            // Add the new element to our canvas copy
-            updatedCanvas.elements.push(elementToAdd);
-            console.log(`Adding element ${elementToAdd.id} from peer to canvas, now has ${updatedCanvas.elements.length} elements`);
-            
-            // Update the canvas state with our modified copy
-            setCurrentCanvas(updatedCanvas);
-            
-            // Also update localStorage for persistence
-            localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
-            
-            // Show a notification that a new element was added
-            toast.success('New element added by collaborator');
-          } else {
-            console.log(`Element ${elementToAdd.id} already exists, skipping`);
-          }
+          // Update the canvas state
+          setCurrentCanvas(updatedCanvas);
+          localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+          
+          // Force UI update with custom event
+          window.dispatchEvent(new CustomEvent('force-canvas-refresh', {
+            detail: { operation: 'add', elementId }
+          }));
+          
+          console.log(`Successfully added element ${elementId} to canvas`);
         } catch (error) {
           console.error('Error processing add operation:', error);
         }
-      } else if (currentCanvasData && payload.operation === 'update' && payload.element && payload.element.id) {
-        console.log('DIRECT UPDATE: Applying element update directly:', payload.element.id);
-    
-        // Apply the update immediately and directly to the canvas state
-        setCurrentCanvas(prevCanvas => {
-          if (!prevCanvas) return prevCanvas;
+      }
+      // FOR UPDATE OPERATIONS: Always apply updates directly
+      else if (payload.operation === 'update' && payload.element && payload.element.id) {
+        try {
+          console.log(`DIRECT UPDATE: Processing position update for ${payload.element.id}`);
           
-          // Find and update the element with proper type conversion for coordinates
-          const updatedElements = prevCanvas.elements.map(el => 
-            el.id === payload.element.id ? { 
-              ...el, 
-              // Ensure coordinates are properly converted to numbers
-              x: typeof payload.element.x === 'number' ? payload.element.x : 
-                 (payload.element.x !== undefined ? Number(payload.element.x) : el.x),
-              y: typeof payload.element.y === 'number' ? payload.element.y : 
-                 (payload.element.y !== undefined ? Number(payload.element.y) : el.y),
-              // Copy any other updated properties
-              ...payload.element
-            } : el
-          );
+          // Create updated canvas with the element changes
+          const updatedCanvas = {
+            ...currentCanvasData,
+            elements: currentCanvasData.elements.map(el => 
+              el.id === payload.element.id ? { 
+                ...el, 
+                x: typeof payload.element.x === 'number' ? payload.element.x : 
+                   (payload.element.x !== undefined ? Number(payload.element.x) : el.x),
+                y: typeof payload.element.y === 'number' ? payload.element.y : 
+                   (payload.element.y !== undefined ? Number(payload.element.y) : el.y),
+                ...payload.element
+              } : el
+            )
+          };
           
-          // Log the update to verify it's happening
-          console.log(`DIRECT UPDATE APPLIED: Element ${payload.element.id} position set to x:${payload.element.x}, y:${payload.element.y}`);
+          // Update the canvas state and localStorage
+          setCurrentCanvas(updatedCanvas);
+          localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
           
-          // Create new canvas state with updated elements
-          const updatedCanvas = { ...prevCanvas, elements: updatedElements };
+          // Force a UI update
+          window.dispatchEvent(new CustomEvent('force-canvas-refresh', {
+            detail: { operation: 'update', elementId: payload.element.id }
+          }));
           
-          // Update localStorage for persistence
-          try {
-            localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
-          } catch (err) {
-            console.error('Error updating localStorage:', err);
-          }
-          
-          return updatedCanvas;
-          });
+          console.log(`Successfully updated element ${payload.element.id}`);
+        } catch (error) {
+          console.error('Error processing update operation:', error);
+        }
+      
       } else if (currentCanvasData && payload.operation === 'delete' && payload.elementId) {
         try {
           // Make a deep copy to avoid mutation issues
