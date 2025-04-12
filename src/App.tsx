@@ -18,8 +18,8 @@ import PresentationPage from '@/pages/PresentationPage';
 import CookieConsent from './components/common/CookieConsent';
 import { AnalyticsProvider } from './contexts/AnalyticsContext';
 import { AuthProvider } from './contexts/AuthContext';
-import { CanvasProvider } from './contexts/CanvasContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import { CanvasProvider } from './contexts/CanvasContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
 function App() {
@@ -34,8 +34,8 @@ function App() {
     <ThemeProvider>
       <AnalyticsProvider>
         <AuthProvider>
-          <CanvasProvider>
-            <WebSocketProvider>
+          <WebSocketProvider>
+            <CanvasProvider>
               <Routes>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<HomePage />} />
@@ -56,8 +56,8 @@ function App() {
               
               <Toaster position="top-center" />
               <CookieConsent />
-            </WebSocketProvider>
-          </CanvasProvider>
+            </CanvasProvider>
+          </WebSocketProvider>
         </AuthProvider>
       </AnalyticsProvider>
     </ThemeProvider>
