@@ -4,13 +4,11 @@ import { useCanvas, CanvasElement } from '@/contexts/CanvasContext';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X, Maximize, Grid } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '@/contexts/ThemeContext';
 
 const TRANSITION_DURATION = 800; // ms
 
 const PresentationMode: React.FC = () => {
   const { currentCanvas } = useCanvas();
-  const { theme } = useTheme();
   const navigate = useNavigate();
   
   const [currentElementIndex, setCurrentElementIndex] = useState(0);
@@ -29,128 +27,52 @@ const PresentationMode: React.FC = () => {
   useEffect(() => {
     if (!currentCanvas) return;
     
-    // Build a presentation path based on arrows with improved branch traversal
+    // Build a presentation path based on arrows
     const buildPresentationPath = () => {
       const path: string[] = [];
       const arrows = currentCanvas.elements.filter(el => el.type === 'arrow');
       
-      // Start with any card or frame element if no arrows
+      // Start with any card element if no arrows
       if (arrows.length === 0) {
-        const firstElement = currentCanvas.elements.find(
-          el => ['card', 'image', 'frame'].includes(el.type)
+        const firstCard = currentCanvas.elements.find(
+          el => el.type === 'card' || el.type === 'image'
         );
-        if (firstElement) {
-          path.push(firstElement.id);
+        if (firstCard) {
+          path.push(firstCard.id);
         }
         return path;
       }
       
-      // Find all possible starting elements (those that are only source, never destination)
+      // Find starting elements (those that are only source, never destination)
       const allDestinations = new Set(arrows.map(a => a.toId));
       const possibleStarts = arrows
         .filter(a => !allDestinations.has(a.fromId))
         .map(a => a.fromId);
       
-      // Use the first start element or any card/frame if no clear start
+      // Use the first start element or any card if no clear start
       if (possibleStarts.length > 0) {
         path.push(possibleStarts[0]!);
       } else {
-        const firstElement = currentCanvas.elements.find(
-          el => ['card', 'image', 'frame'].includes(el.type)
+        const firstCard = currentCanvas.elements.find(
+          el => el.type === 'card' || el.type === 'image'
         );
-        if (firstElement) {
-          path.push(firstElement.id);
+        if (firstCard) {
+          path.push(firstCard.id);
         }
         return path;
       }
       
-      // Build a graph of connections from element to element
-      const buildGraph = () => {
-        const graph: Record<string, string[]> = {};
+      // Build the path by following arrows
+      let current = path[0];
+      while (current) {
+        const nextArrow = arrows.find(a => a.fromId === current);
+        if (!nextArrow) break;
         
-        arrows.forEach(arrow => {
-          if (!arrow.fromId || !arrow.toId) return;
-          
-          if (!graph[arrow.fromId]) {
-            graph[arrow.fromId] = [];
-          }
-          
-          // Only add if not already in the array
-          if (!graph[arrow.fromId].includes(arrow.toId)) {
-            graph[arrow.fromId].push(arrow.toId);
-          }
-        });
+        const nextElement = nextArrow.toId;
+        if (path.includes(nextElement)) break; // Avoid cycles
         
-        // Sort outgoing edges clockwise, with rightmost first
-        // This ensures that navigating follows right-to-left pattern
-        Object.keys(graph).forEach(nodeId => {
-          const sourceElement = currentCanvas.elements.find(el => el.id === nodeId);
-          if (!sourceElement) return;
-          
-          const sourceX = sourceElement.x + (sourceElement.width || 0) / 2;
-          const sourceY = sourceElement.y + (sourceElement.height || 0) / 2;
-          
-          graph[nodeId].sort((aId, bId) => {
-            const aElement = currentCanvas.elements.find(el => el.id === aId);
-            const bElement = currentCanvas.elements.find(el => el.id === bId);
-            
-            if (!aElement || !bElement) return 0;
-            
-            const aX = aElement.x + (aElement.width || 0) / 2;
-            const aY = aElement.y + (aElement.height || 0) / 2;
-            const bX = bElement.x + (bElement.width || 0) / 2;
-            const bY = bElement.y + (bElement.height || 0) / 2;
-            
-            // Calculate angles from source to targets
-            const angleA = Math.atan2(aY - sourceY, aX - sourceX);
-            const angleB = Math.atan2(bY - sourceY, bX - sourceX);
-            
-            // Sort by angle, right-most first (negative angles come first)
-            return angleA - angleB;
-          });
-        });
-        
-        return graph;
-      };
-      
-      const graph = buildGraph();
-      
-      // Function to traverse the graph depth-first, following branches fully before backtracking
-      const depthFirstTraversal = (startNode: string, visited = new Set<string>()) => {
-        // Avoid cycles
-        if (visited.has(startNode)) return;
-        
-        // Add node to visited set
-        visited.add(startNode);
-        
-        // Add node to path if it's not just a connector
-        const element = currentCanvas.elements.find(el => el.id === startNode);
-        if (element && element.type !== 'arrow') {
-          path.push(startNode);
-        }
-        
-        // Visit all neighbors according to the sorted order (right-most first)
-        const neighbors = graph[startNode] || [];
-        for (const neighbor of neighbors) {
-          depthFirstTraversal(neighbor, visited);
-        }
-      };
-      
-      // Clear path and start depth-first from the starting node
-      path.length = 0;
-      depthFirstTraversal(possibleStarts[0]!);
-      
-      // If there are disconnected components, add them to the path
-      const visited = new Set(path);
-      const presentableElements = currentCanvas.elements.filter(
-        el => ['card', 'image', 'frame', 'shape', 'text'].includes(el.type || '')
-      );
-      
-      for (const element of presentableElements) {
-        if (!visited.has(element.id)) {
-          path.push(element.id);
-          visited.add(element.id);
-        }
+        path.push(nextElement);
+        current = nextElement;
       }
       
       return path;
@@ -335,13 +257,13 @@ const PresentationMode: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentElementIndex, presentationPath, isFullscreen, showOverview]);
+  }, [currentElementIndex, presentationPath, isFullscreen, showOverview, handleNext, handlePrevious]);
   
   const currentElement = getCurrentElement();
   
   if (!currentCanvas || !currentElement) {
     return (
-      <div className={`h-screen flex items-center justify-center ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">No presentation content available</h2>
           <Button onClick={handleExit}>
@@ -353,15 +275,15 @@ const PresentationMode: React.FC = () => {
   }
   
   if (showOverview) {
-    // Show a grid of all slides (cards, frames, images, etc.)
+    // Show a grid of all slides (cards and images)
     return (
-      <div className={`h-screen w-screen overflow-hidden ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100'} flex flex-col`}>
-        <div className={`flex justify-between items-center p-4 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-          <h2 className={`${theme === 'dark' ? 'text-white' : 'text-gray-900'} text-xl font-semibold`}>Presentation Overview</h2>
+      <div className="h-screen w-screen overflow-hidden bg-gray-900 flex flex-col">
+        <div className="flex justify-between items-center p-4 bg-gray-800">
+          <h2 className="text-white text-xl font-semibold">Presentation Overview</h2>
           <Button 
             variant="outline"
             size="sm"
-            className={`${theme === 'dark' ? 'text-white border-white hover:bg-gray-700' : 'text-gray-900 border-gray-500 hover:bg-gray-200'}`}
+            className="text-white border-white hover:bg-gray-700"
             onClick={() => setShowOverview(false)}
           >
             Back to Presentation
@@ -380,28 +302,16 @@ const PresentationMode: React.FC = () => {
                   className={`
                     p-2 cursor-pointer rounded-lg transition-all transform
                     ${currentElementIndex === index ? 'ring-4 ring-blue-500 scale-105' : 'hover:scale-105'}
-                    ${theme === 'dark' ? 'bg-gray-800' : 'bg-white shadow-md'}
                   `}
                   onClick={() => handleJumpToElement(index)}
                 >
-                  <div className={`rounded-md p-3 aspect-video flex items-center justify-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-white'}`}>
+                  <div className="bg-white rounded-md p-3 shadow-lg aspect-video flex items-center justify-center">
                     {element.type === 'card' && (
                       <div 
-                        className="w-full h-full overflow-hidden rounded-md"
+                        className="w-full h-full overflow-hidden"
                         style={{ backgroundColor: element.color || '#ffffff' }}
                       >
-                        <div className={`text-sm truncate p-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {element.content}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {element.type === 'frame' && (
-                      <div 
-                        className="w-full h-full overflow-hidden border-2 rounded-md flex items-center justify-center"
-                        style={{ borderColor: element.color || '#9b87f5' }}
-                      >
-                        <div className="text-sm">Frame</div>
+                        <div className="text-sm truncate">{element.content}</div>
                       </div>
                     )}
                     
@@ -414,32 +324,8 @@ const PresentationMode: React.FC = () => {
                         />
                       </div>
                     )}
-                    
-                    {element.type === 'text' && (
-                      <div className="w-full h-full flex items-center justify-center overflow-hidden">
-                        <div className="text-sm truncate" style={{ color: element.color || '#000000' }}>
-                          {element.content}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {element.type === 'shape' && (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-xs">
-                          {element.shapeType || 'Shape'}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {element.type === 'drawing' && (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-xs">Drawing</div>
-                      </div>
-                    )}
                   </div>
-                  <div className={`text-center mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    Slide {index + 1}
-                  </div>
+                  <div className="text-white text-center mt-1">Slide {index + 1}</div>
                 </div>
               );
             })}
@@ -449,19 +335,16 @@ const PresentationMode: React.FC = () => {
     );
   }
   
-  // Calculate which elements are active in the current slide
-  const activeElementIds = new Set([currentElement.id]);
-  
   // Render the canvas view with transitions
   return (
-    <div className={`h-screen w-screen overflow-hidden ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100'} flex items-center justify-center relative`}>
+    <div className="h-screen w-screen overflow-hidden bg-gray-900 flex items-center justify-center relative">
       <div 
         className="absolute top-4 right-4 flex space-x-2 z-10"
       >
         <Button 
           variant="outline" 
           size="sm" 
-          className={`${theme === 'dark' ? 'text-white border-white hover:bg-gray-800' : 'text-gray-900 border-gray-500 hover:bg-gray-200'}`}
+          className="text-white border-white hover:bg-gray-800"
           onClick={handleOverviewToggle}
           title="Overview (G)"
         >
@@ -471,7 +354,7 @@ const PresentationMode: React.FC = () => {
         <Button 
           variant="outline" 
           size="sm" 
-          className={`${theme === 'dark' ? 'text-white border-white hover:bg-gray-800' : 'text-gray-900 border-gray-500 hover:bg-gray-200'}`}
+          className="text-white border-white hover:bg-gray-800"
           onClick={toggleFullscreen}
           title="Fullscreen (F)"
         >
@@ -481,7 +364,7 @@ const PresentationMode: React.FC = () => {
         <Button 
           variant="outline"
           size="sm"
-          className={`${theme === 'dark' ? 'text-white border-white hover:bg-gray-800' : 'text-gray-900 border-gray-500 hover:bg-gray-200'}`}
+          className="text-white border-white hover:bg-gray-800"
           onClick={handleExit}
           title="Exit (Esc)"
         >
@@ -492,7 +375,7 @@ const PresentationMode: React.FC = () => {
       <Button
         variant="ghost"
         size="icon"
-        className={`absolute left-4 top-1/2 transform -translate-y-1/2 ${theme === 'dark' ? 'text-white hover:bg-gray-800' : 'text-gray-900 hover:bg-gray-200'} opacity-50 hover:opacity-100 z-10`}
+        className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white opacity-50 hover:opacity-100 hover:bg-gray-800 z-10"
         onClick={handlePrevious}
         disabled={currentElementIndex === 0 || isTransitioning}
       >
@@ -503,9 +386,7 @@ const PresentationMode: React.FC = () => {
         className="relative w-full h-full overflow-hidden"
         style={{
           backgroundSize: '30px 30px',
-          backgroundImage: theme === 'dark' 
-            ? 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)'
-            : 'linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px)',
+          backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)',
         }}
       >
         <div
@@ -514,45 +395,30 @@ const PresentationMode: React.FC = () => {
             transform: `translate(${-viewportPosition.x}px, ${-viewportPosition.y}px)`,
           }}
         >
-          {/* Render all canvas elements */}
+          {/* Render the canvas elements with focus on current element */}
           {currentCanvas.elements.map(element => (
             <div
               key={element.id}
-              className={`absolute transition-opacity duration-300 ${activeElementIds.has(element.id) ? 'opacity-100' : 'opacity-50'}`}
+              className="absolute"
               style={{
                 left: element.x,
                 top: element.y,
                 width: element.width,
                 height: element.height,
-                zIndex: element.type === 'frame' ? 0 : 1,
+                opacity: element.type === 'arrow' ? 0.7 : 1,
               }}
             >
               {element.type === 'card' && (
                 <div 
-                  className="w-full h-full bg-white rounded-lg shadow-xl p-5 overflow-auto"
+                  className="w-full h-full bg-white rounded-lg shadow-2xl p-5 overflow-auto"
                   style={{ backgroundColor: element.color || '#ffffff' }}
                 >
                   <div className="text-lg whitespace-pre-wrap">{element.content}</div>
                 </div>
               )}
               
-              {element.type === 'frame' && (
-                <div 
-                  className="w-full h-full rounded-lg"
-                  style={{ 
-                    border: `2px solid ${element.color || '#9b87f5'}`,
-                    backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)',
-                  }}
-                >
-                  <div className="absolute -top-6 left-2 px-2 text-sm"
-                    style={{ color: element.color || '#9b87f5' }}>
-                    {element.content || 'Frame'}
-                  </div>
-                </div>
-              )}
-              
               {element.type === 'image' && (
-                <div className="w-full h-full bg-white rounded-lg shadow-xl p-2">
+                <div className="w-full h-full bg-white rounded-lg shadow-2xl p-2">
                   <img 
                     src={element.imageUrl} 
                     alt="" 
@@ -565,60 +431,13 @@ const PresentationMode: React.FC = () => {
                 <div 
                   className="p-2 rounded"
                   style={{
-                    color: element.color || (theme === 'dark' ? '#ffffff' : '#000000'),
+                    color: element.color || '#ffffff',
                     fontSize: element.fontSize ? `${element.fontSize * 1.5}px` : '24px',
-                    textShadow: theme === 'dark' ? '0 0 5px rgba(0,0,0,0.7)' : 'none'
+                    textShadow: '0 0 5px rgba(0,0,0,0.7)'
                   }}
                 >
                   {element.content}
                 </div>
-              )}
-              
-              {element.type === 'drawing' && element.points && (
-                <svg
-                  className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                  style={{ left: 0, top: 0, width: '100%', height: '100%' }}
-                >
-                  <polyline
-                    points={element.points.map(p => `${p.x},${p.y}`).join(' ')}
-                    fill="none"
-                    stroke={element.color || (theme === 'dark' ? '#ffffff' : '#000000')}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              )}
-              
-              {element.type === 'shape' && (
-                <svg width="100%" height="100%" viewBox={`0 0 ${element.width || 100} ${element.height || 100}`}>
-                  {element.shapeType === 'circle' && (
-                    <circle 
-                      cx={(element.width || 100) / 2} 
-                      cy={(element.height || 100) / 2} 
-                      r={Math.min(element.width || 100, element.height || 100) / 2 - 2} 
-                      fill={element.color || '#ffffff'} 
-                      stroke={theme === 'dark' ? '#ffffff' : '#000000'} 
-                      strokeWidth="2" 
-                    />
-                  )}
-                  {element.shapeType === 'triangle' && (
-                    <polygon 
-                      points={`${(element.width || 100) / 2},5 5,${(element.height || 100) - 5} ${(element.width || 100) - 5},${(element.height || 100) - 5}`} 
-                      fill={element.color || '#ffffff'} 
-                      stroke={theme === 'dark' ? '#ffffff' : '#000000'} 
-                      strokeWidth="2" 
-                    />
-                  )}
-                  {element.shapeType === 'diamond' && (
-                    <polygon 
-                      points={`${(element.width || 100) / 2},5 ${(element.width || 100) - 5},${(element.height || 100) / 2} ${(element.width || 100) / 2},${(element.height || 100) - 5} 5,${(element.height || 100) / 2}`} 
-                      fill={element.color || '#ffffff'} 
-                      stroke={theme === 'dark' ? '#ffffff' : '#000000'} 
-                      strokeWidth="2" 
-                    />
-                  )}
-                </svg>
               )}
               
               {/* Simplified arrow rendering for presentation */}
@@ -693,13 +512,9 @@ const PresentationMode: React.FC = () => {
                       toX = toCenterX + (nx / ny) * side * toHeight / 2;
                     }
                     
-                    // Check if this arrow is part of the presentation path and connects current to next element
-                    const currentPathIndex = presentationPath.indexOf(currentElement.id);
-                    const nextPathIndex = currentPathIndex + 1 < presentationPath.length ? presentationPath[currentPathIndex + 1] : null;
-                    
-                    const isNextPathArrow = 
-                      element.fromId === currentElement.id && 
-                      nextPathIndex && element.toId === nextPathIndex;
+                    const highlightCurrentConnection = 
+                      (presentationPath[currentElementIndex] === element.fromId && 
+                       presentationPath[currentElementIndex + 1] === element.toId);
                     
                     return (
                       <>
@@ -708,10 +523,10 @@ const PresentationMode: React.FC = () => {
                           y1={fromY}
                           x2={toX}
                           y2={toY}
-                          stroke={element.color || (theme === 'dark' ? '#FFFFFF' : '#000000')}
-                          strokeWidth={isNextPathArrow ? 4 : 2}
+                          stroke={element.color || '#FFFFFF'}
+                          strokeWidth={highlightCurrentConnection ? 4 : 2}
                           markerEnd="url(#arrowhead)"
-                          strokeDasharray={isNextPathArrow ? "none" : "5,5"}
+                          strokeDasharray={highlightCurrentConnection ? "none" : "5,5"}
                         />
                         <defs>
                           <marker
@@ -724,7 +539,7 @@ const PresentationMode: React.FC = () => {
                           >
                             <polygon
                               points="0 0, 10 3.5, 0 7"
-                              fill={element.color || (theme === 'dark' ? '#FFFFFF' : '#000000')}
+                              fill={element.color || '#FFFFFF'}
                             />
                           </marker>
                         </defs>
@@ -741,14 +556,14 @@ const PresentationMode: React.FC = () => {
       <Button
         variant="ghost"
         size="icon"
-        className={`absolute right-4 top-1/2 transform -translate-y-1/2 ${theme === 'dark' ? 'text-white hover:bg-gray-800' : 'text-gray-900 hover:bg-gray-200'} opacity-50 hover:opacity-100 z-10`}
+        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white opacity-50 hover:opacity-100 hover:bg-gray-800 z-10"
         onClick={handleNext}
         disabled={currentElementIndex === presentationPath.length - 1 || isTransitioning}
       >
         <ChevronRight size={24} />
       </Button>
       
-      <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 ${theme === 'dark' ? 'text-white bg-black' : 'text-gray-900 bg-white'} bg-opacity-50 px-3 py-1 rounded-full`}>
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 px-3 py-1 rounded-full">
         {currentElementIndex + 1} / {presentationPath.length}
       </div>
     </div>

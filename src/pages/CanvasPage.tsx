@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,8 +12,8 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 
 const CanvasPage: React.FC = () => {
-  const { currentCanvas, setCurrentCanvas, saveCurrentCanvasToAccount } = useCanvas();
-  const { isLoggedIn } = useAuth();
+  const { currentCanvas, saveCurrentCanvasToAccount, setCurrentCanvas } = useCanvas();
+  const { user, isLoggedIn } = useAuth();
   const { isConnected } = useWebSocket();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
@@ -51,7 +50,7 @@ const CanvasPage: React.FC = () => {
   }, [setCurrentCanvas]);
 
   useEffect(() => {
-    const handleForceRefresh = (event: CustomEvent) => {
+    const handleForceRefresh = (event) => {
       console.log("Force refresh event received:", event.detail);
       try {
         // Wait a brief moment to ensure all operations are complete
@@ -73,9 +72,9 @@ const CanvasPage: React.FC = () => {
       }
     };
   
-    window.addEventListener('force-canvas-refresh', handleForceRefresh as EventListener);
+    window.addEventListener('force-canvas-refresh', handleForceRefresh);
     return () => {
-      window.removeEventListener('force-canvas-refresh', handleForceRefresh as EventListener);
+      window.removeEventListener('force-canvas-refresh', handleForceRefresh);
     };
   }, [setCurrentCanvas]);
 
@@ -125,7 +124,7 @@ const CanvasPage: React.FC = () => {
     const intervalId = setInterval(loadPendingCanvas, 2000);
     
     return () => clearInterval(intervalId);
-  }, [currentCanvas, setCurrentCanvas, isConnected, loadAttempts, lastLoadedCanvasId]);
+  }, [currentCanvas, setCurrentCanvas, isConnected, loadAttempts, lastLoadedCanvasId]); // Add new dependencies
   
   if (!currentCanvas) {
     return <div>Loading...</div>;
@@ -138,7 +137,7 @@ const CanvasPage: React.FC = () => {
   const isAnonymous = currentCanvas.createdBy === 'anonymous';
 
   const handleSaveToAccount = async () => {
-    if (!isLoggedIn) {
+    if (!isLoggedIn()) {
       toast.info('Please log in to save this canvas');
       navigate('/login');
       return;
@@ -146,9 +145,7 @@ const CanvasPage: React.FC = () => {
     
     setIsSaving(true);
     try {
-      if (saveCurrentCanvasToAccount) {
-        await saveCurrentCanvasToAccount();
-      }
+      await saveCurrentCanvasToAccount();
     } finally {
       setIsSaving(false);
     }

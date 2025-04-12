@@ -20,14 +20,14 @@ const CreateCanvasPage: React.FC = () => {
   
   // Redirect if not logged in
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (!isLoggedIn()) {
       navigate('/login');
     }
   }, [isLoggedIn, navigate]);
   
   // Check if user has reached canvas limit
   useEffect(() => {
-    if (userCanvases && userCanvases.length >= 5) {
+    if (userCanvases.length >= 5) {
       toast.error('You can only create up to 5 canvases. Please delete one first.');
       navigate('/dashboard');
     }
@@ -43,10 +43,8 @@ const CreateCanvasPage: React.FC = () => {
     
     setIsLoading(true);
     try {
-      if (createCanvas) {
-        await createCanvas(name.trim(), isInfinite);
-        navigate('/canvas');
-      }
+      const canvas = await createCanvas(name.trim(), isInfinite);
+      navigate('/canvas');
     } catch (error) {
       console.error('Error creating canvas:', error);
     } finally {

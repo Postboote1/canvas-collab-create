@@ -3,7 +3,6 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
-import { useCanvasWebSocket } from '@/hooks/useCanvasWebSocket';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasElement from './CanvasElement';
 import { toast } from 'sonner';
@@ -18,8 +17,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas, setCurrentCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler } = useWebSocket();
-  const { sendCanvasOperation } = useCanvasWebSocket();
-  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond' | 'frame'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -38,7 +36,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   // Auto-save every 30 seconds
   useEffect(() => {
-    if (!readOnly && currentCanvas && saveCanvas) {
+    if (!readOnly && currentCanvas) {
       const interval = setInterval(() => {
         saveCanvas();
       }, 30000);
@@ -46,6 +44,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       return () => clearInterval(interval);
     }
   }, [readOnly, currentCanvas, saveCanvas]);
+
+  // Remove the effect that was auto-connecting to peers
+  // This connection should only happen when the Share button is clicked
 
   // Handle mouse down on canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -66,7 +67,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     if (activeTool === 'select') {
       // Check if we're clicking on an element
       const clickedElement = currentCanvas?.elements.find(element => {
-        if (element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape' || element.type === 'frame') {
+        if (element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') {
           return (
             x >= element.x &&
             x <= element.x + (element.width || 0) &&
@@ -150,7 +151,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     } else if (activeTool === 'arrow') {
       // Find element under the cursor
       const element = currentCanvas?.elements.find(el => {
-        if (el.type === 'card' || el.type === 'text' || el.type === 'image' || el.type === 'shape' || el.type === 'frame') {
+        if (el.type === 'card' || el.type === 'text' || el.type === 'image' || el.type === 'shape') {
           return (
             x >= el.x &&
             x <= el.x + (el.width || 0) &&
@@ -173,7 +174,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
               y: 0,
               fromId: startElement.id,
               toId: element.id,
-              color: activeColor // Use active color for arrows
+              color: '#000000' // Default arrow color
             };
 
             addElement(newArrow);
@@ -241,33 +242,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           payload: {
             operation: 'add',
             element: newShape
-          }
-        });
-      }
-
-      setActiveTool('select');
-    } else if (activeTool === 'frame') {
-      const newFrame: Omit<CanvasElementType, 'id'> = {
-        type: 'frame',
-        content: 'Frame',
-        x,
-        y,
-        width: 500,
-        height: 350,
-        color: '#9b87f5' // Default frame color
-      };
-
-      addElement(newFrame);
-      toast.success('Frame added', {
-        position: 'bottom-center',
-      });
-
-      if (isConnected) {
-        sendMessage({
-          type: 'canvasOperation',
-          payload: {
-            operation: 'add',
-            element: newFrame
           }
         });
       }
@@ -769,7 +743,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       <CanvasToolbar
         activeTool={activeTool}
         setActiveTool={setActiveTool}
-        onSave={saveCanvas ? () => saveCanvas() : undefined}
+        onSave={() => saveCanvas()}
         onImageUpload={handleImageUpload}
         readOnly={readOnly}
         scale={scale}
@@ -870,5 +844,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     </div>
   );
 };
+
+
 
 export default CanvasEditor;

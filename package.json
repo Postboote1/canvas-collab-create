@@ -43,7 +43,6 @@
     "@radix-ui/react-tooltip": "^1.1.4",
     "@tanstack/react-query": "^5.56.2",
     "@types/react-helmet": "^6.1.11",
-    "@types/uuid": "^10.0.0",
     "axios": "^1.8.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -71,7 +70,6 @@
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
-    "uuid": "^11.1.0",
     "vaul": "^0.9.3",
     "ws": "^8.18.1",
     "zod": "^3.23.8"
