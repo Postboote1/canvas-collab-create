@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { CanvasElement as ICanvasElement } from '@/contexts/CanvasContext';
 import {

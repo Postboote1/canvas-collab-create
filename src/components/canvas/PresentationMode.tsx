@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useCanvas, CanvasElement } from '@/contexts/CanvasContext';
 import { Button } from '@/components/ui/button';
@@ -37,7 +36,7 @@ const PresentationMode: React.FC = () => {
       // Start with any card or frame element if no arrows
       if (arrows.length === 0) {
         const firstElement = currentCanvas.elements.find(
-          el => ['card', 'image', 'frame'].includes(el.type || '')
+          el => ['card', 'image', 'frame'].includes(el.type)
         );
         if (firstElement) {
           path.push(firstElement.id);
@@ -56,7 +55,7 @@ const PresentationMode: React.FC = () => {
         path.push(possibleStarts[0]!);
       } else {
         const firstElement = currentCanvas.elements.find(
-          el => ['card', 'image', 'frame'].includes(el.type || '')
+          el => ['card', 'image', 'frame'].includes(el.type)
         );
         if (firstElement) {
           path.push(firstElement.id);

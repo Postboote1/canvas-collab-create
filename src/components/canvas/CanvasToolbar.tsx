@@ -1,5 +1,4 @@
 
-// @allowedFileUpdate src/components/canvas/CanvasToolbar.tsx
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Save, Maximize, Square, Text, Image, Pencil, ArrowRight, PanelRightOpen, Move, Circle, Triangle, MousePointer } from 'lucide-react';
