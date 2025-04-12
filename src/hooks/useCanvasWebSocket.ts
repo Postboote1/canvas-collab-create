@@ -11,6 +11,11 @@ export const useCanvasWebSocket = () => {
   useEffect(() => {
     if (!registerHandler) return;
 
+    // Store the current canvas state in localStorage whenever it changes
+    if (currentCanvas) {
+      localStorage.setItem('pendingCanvasState', JSON.stringify(currentCanvas));
+    }
+
     const unregisterCanvasState = registerHandler('canvasState', (payload: any) => {
       if (!payload) return;
       

@@ -1,13 +1,25 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import PresentationMode from '@/components/canvas/PresentationMode';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { CanvasProvider } from '@/contexts/CanvasContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const PresentationPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  // Load canvas data from localStorage if it exists
+  useEffect(() => {
+    const pendingCanvasState = localStorage.getItem('pendingCanvasState');
+    if (!pendingCanvasState) {
+      // If no canvas data is found, redirect back to canvas page
+      navigate('/canvas');
+    }
+  }, [navigate]);
+
   return (
     <ThemeProvider>
       <AuthProvider>

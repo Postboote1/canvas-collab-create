@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useContext, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from '@types/uuid';
 
 export type CanvasElement = {
   id: string;
@@ -101,8 +101,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const saveCanvas = useCallback(async () => {
     console.log('Mock implementation of saveCanvas');
+    if (currentCanvas) {
+      localStorage.setItem('pendingCanvasState', JSON.stringify(currentCanvas));
+    }
     return Promise.resolve();
-  }, []);
+  }, [currentCanvas]);
 
   const createCanvas = useCallback(async (name: string, isInfinite: boolean): Promise<CanvasData> => {
     console.log(`Creating canvas: ${name}, infinite: ${isInfinite}`);
@@ -118,6 +121,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     setCurrentCanvas(newCanvas);
     setUserCanvases(prev => [...prev, newCanvas]);
+    
+    // Store in localStorage
+    localStorage.setItem('pendingCanvasState', JSON.stringify(newCanvas));
     
     return newCanvas;
   }, []);
@@ -135,6 +141,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     
     setCurrentCanvas(newCanvas);
+    
+    // Store in localStorage
+    localStorage.setItem('pendingCanvasState', JSON.stringify(newCanvas));
     
     return newCanvas;
   }, []);
