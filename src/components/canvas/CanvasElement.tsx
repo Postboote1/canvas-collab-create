@@ -341,14 +341,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               e.stopPropagation(); 
               if (!readOnly) onSelectElement(element.id); 
             }}
-            onMouseDown={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
-            onTouchStart={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
           >
             {isEditing ? (
               <textarea
@@ -382,14 +374,6 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             }}
             onDoubleClick={handleDoubleClick}
             onClick={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
-            onMouseDown={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
-            onTouchStart={(e) => { 
               e.stopPropagation(); 
               if (!readOnly) onSelectElement(element.id); 
             }}
