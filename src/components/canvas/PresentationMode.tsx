@@ -451,6 +451,53 @@ const PresentationMode: React.FC = () => {
                   {element.content}
                 </div>
               )}
+              {/* Add drawing element support */}
+              {element.type === 'drawing' && element.points && element.points.length > 0 && (
+                <svg className="w-full h-full pointer-events-none">
+                  <polyline
+                    points={element.points.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke={element.color || (theme === 'light' ? '#000000' : '#FFFFFF')}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+              )}
+
+              {/* Add shape element support */}
+              {element.type === 'shape' && (
+                <svg className="w-full h-full pointer-events-none">
+                  {element.shapeType === 'circle' && (
+                    <ellipse
+                      cx={(element.width || 100) / 2}
+                      cy={(element.height || 100) / 2}
+                      rx={(element.width || 100) / 2 - 5}
+                      ry={(element.height || 100) / 2 - 5}
+                      fill={element.color || '#FFFFFF'} 
+                      stroke={theme === 'light' ? '#000000' : '#FFFFFF'}
+                      strokeWidth="2"
+                    />
+                  )}
+                  {element.shapeType === 'triangle' && (
+                    <polygon
+                      points={`${(element.width || 100) / 2},5 5,${(element.height || 100) - 5} ${(element.width || 100) - 5},${(element.height || 100) - 5}`}
+                      fill={element.color || '#FFFFFF'}
+                      stroke={theme === 'light' ? '#000000' : '#FFFFFF'}
+                      strokeWidth="2"
+                    />
+                  )}
+                  {element.shapeType === 'diamond' && (
+                    <polygon
+                      points={`${(element.width || 100) / 2},5 ${(element.width || 100) - 5},${(element.height || 100) / 2} ${(element.width || 100) / 2},${(element.height || 100) - 5} 5,${(element.height || 100) / 2}`}
+                      fill={element.color || '#FFFFFF'}
+                      stroke={theme === 'light' ? '#000000' : '#FFFFFF'}
+                      strokeWidth="2"
+                    />
+                  )}
+                </svg>
+              )}
               
               {/* Simplified arrow rendering for presentation */}
               {element.type === 'arrow' && element.fromId && element.toId && (
