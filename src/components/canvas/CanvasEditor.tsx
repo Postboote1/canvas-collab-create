@@ -61,8 +61,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale + viewportPosition.x;
-    const y = (e.clientY - rect.top) / scale + viewportPosition.y;
+    const x = (e.clientX - rect.left) / scale// + viewportPosition.x;
+    const y = (e.clientY - rect.top) / scale// + viewportPosition.y;
 
     if (activeTool === 'select') {
       // Check if we're clicking on an element
@@ -302,8 +302,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     }
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale + viewportPosition.x;
-    const y = (e.clientY - rect.top) / scale + viewportPosition.y;
+    const x = (e.clientX - rect.left) / scale// + viewportPosition.x;
+    const y = (e.clientY - rect.top) / scale// + viewportPosition.y;
 
     if (isDrawing && activeTool === 'draw') {
       setDrawingPoints([...drawingPoints, { x, y }]); // Add point to current drawing
@@ -782,13 +782,8 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         >
           {/* Content container for elements and temporary drawing */}
           <div ref={contentRef} className="absolute top-0 left-0" style={{ width: '100%', height: '100%' }}>
-          {currentCanvas?.elements
-            // deduplicate by ID to prevent React warnings
-            .filter((element, index, self) => {
-              // Return the first occurrence of each element ID
-              return index === self.findIndex(e => e.id === element.id);
-            })
-            .map(element => (
+            {/* Render canvas elements */}
+            {currentCanvas?.elements.map(element => (
               <CanvasElement
                 key={element.id}
                 element={element}
