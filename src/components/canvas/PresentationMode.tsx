@@ -35,21 +35,21 @@ const PresentationMode: React.FC = () => {
   
   useEffect(() => {
     if (!currentCanvas) return;
-    
-    // Build a presentation path based on arrows
+
+    // Build a complete presentation path with proper path navigation
     const buildPresentationPath = () => {
-      const path: string[] = [];
+      const result: string[] = [];
       const arrows = currentCanvas.elements.filter(el => el.type === 'arrow');
       
-      // Start with any card element if no arrows
+      // If no arrows, just return first card or image
       if (arrows.length === 0) {
         const firstCard = currentCanvas.elements.find(
           el => el.type === 'card' || el.type === 'image'
         );
         if (firstCard) {
-          path.push(firstCard.id);
+          result.push(firstCard.id);
         }
-        return path;
+        return result;
       }
       
       // Find starting elements (those that are only source, never destination)
@@ -59,32 +59,115 @@ const PresentationMode: React.FC = () => {
         .map(a => a.fromId);
       
       // Use the first start element or any card if no clear start
+      let startNode: string | undefined;
       if (possibleStarts.length > 0) {
-        path.push(possibleStarts[0]!);
+        startNode = possibleStarts[0]!;
       } else {
         const firstCard = currentCanvas.elements.find(
           el => el.type === 'card' || el.type === 'image'
         );
         if (firstCard) {
-          path.push(firstCard.id);
+          startNode = firstCard.id;
+        } else {
+          return result;
         }
-        return path;
       }
       
-      // Build the path by following arrows
-      let current = path[0];
-      while (current) {
-        const nextArrow = arrows.find(a => a.fromId === current);
-        if (!nextArrow) break;
-        
-        const nextElement = nextArrow.toId;
-        if (path.includes(nextElement)) break; // Avoid cycles
-        
-        path.push(nextElement);
-        current = nextElement;
-      }
+      // Build a map of nodes to their outgoing connections
+      const outgoingArrows = new Map<string, Array<{toId: string, angle: number}>>();
       
-      return path;
+      // Calculate angle for each arrow
+      arrows.forEach(arrow => {
+        if (!arrow.fromId || !arrow.toId) return;
+        
+        const fromElement = currentCanvas.elements.find(el => el.id === arrow.fromId);
+        const toElement = currentCanvas.elements.find(el => el.id === arrow.toId);
+        
+        if (!fromElement || !toElement) return;
+        
+        // Calculate center points of elements
+        const fromCenterX = fromElement.x + (fromElement.width || 0) / 2;
+        const fromCenterY = fromElement.y + (fromElement.height || 0) / 2;
+        const toCenterX = toElement.x + (toElement.width || 0) / 2;
+        const toCenterY = toElement.y + (toElement.height || 0) / 2;
+        
+        const dx = toCenterX - fromCenterX;
+        const dy = toCenterY - fromCenterY;
+
+        // Use a modified angle calculation that prioritizes horizontal direction
+        // This ensures left arrows are always sorted before right arrows
+        let angle = Math.atan2(toCenterY - fromCenterY, toCenterX - fromCenterX) * (180 / Math.PI);
+
+        // Adjust angles to prioritize left-right ordering
+        // Make leftward angles smaller than rightward angles
+        if (dx < 0) { // If arrow points left
+          angle = angle - 360; // Make leftward angles smaller
+        }
+        
+        // Add to outgoingArrows map
+        if (!outgoingArrows.has(arrow.fromId)) {
+          outgoingArrows.set(arrow.fromId, []);
+        }
+        outgoingArrows.get(arrow.fromId)!.push({ toId: arrow.toId, angle });
+      });
+      
+      // Sort outgoing arrows by angle (leftmost first)
+      outgoingArrows.forEach((arrows, nodeId) => {
+        arrows.sort((a, b) => a.angle - b.angle);
+      });
+      
+      // Track visited nodes and forks (nodes with multiple outgoing arrows)
+      const visited = new Set<string>();
+      const forks = new Map<string, number>(); // Maps fork nodes to their index in result array
+  
+      // Build path with fork handling and complete path traversal
+      const buildPath = (nodeId: string) => {
+        if (!nodeId) return;
+        
+        // Add current node to result if not visited
+        if (!result.includes(nodeId)) {
+          result.push(nodeId);
+        }
+        visited.add(nodeId);
+        
+        // Get outgoing connections
+        const outgoing = outgoingArrows.get(nodeId) || [];
+        
+        // If this is a fork (multiple outgoing arrows), record its position
+        if (outgoing.length > 1) {
+          forks.set(nodeId, result.length - 1);
+        }
+        
+        // If no outgoing connections, we're at an end node
+        if (outgoing.length === 0) {
+          return;
+        }
+        
+        // Process each outgoing arrow
+        for (let i = 0; i < outgoing.length; i++) {
+          const { toId } = outgoing[i];
+          
+          // If not the first arrow and this is a fork node
+          // Return to the fork node before following this path
+          if (i > 0) {
+            const forkId = nodeId;
+            const forkIndex = forks.get(forkId)!;
+            
+            // Add the fork node again to return to it
+            result.push(forkId);
+          }
+          
+          // Follow this path completely
+          if (!visited.has(toId)) {
+            buildPath(toId);
+          }
+        }
+      };
+      
+      // Start building the path
+      buildPath(startNode);
+      
+      return result;
     };
     
     const path = buildPresentationPath();
@@ -350,9 +433,8 @@ const PresentationMode: React.FC = () => {
   // Render the canvas view with transitions
   return (
     <div className={`h-screen w-screen overflow-hidden ${bgColor} flex items-center justify-center relative`}>
-      <div 
-        className="absolute top-4 right-4 flex space-x-2 z-10"
-      >
+      {/* Top UI controls */}
+      <div className="absolute top-4 right-4 flex space-x-2 z-50">
         <Button 
           variant="outline" 
           size="sm" 
@@ -384,16 +466,28 @@ const PresentationMode: React.FC = () => {
         </Button>
       </div>
       
+      {/* Navigation buttons */}
       <Button
         variant="ghost"
         size="icon"
-        className={`absolute left-4 top-1/2 transform -translate-y-1/2 ${textColor} opacity-50 hover:opacity-100 ${theme === 'light' ? 'hover:bg-gray-300' : 'hover:bg-gray-800'} z-10`}
+        className={`absolute left-4 top-1/2 transform -translate-y-1/2 ${textColor} opacity-50 hover:opacity-100 ${theme === 'light' ? 'hover:bg-gray-300' : 'hover:bg-gray-800'} z-50`}
         onClick={handlePrevious}
         disabled={currentElementIndex === 0 || isTransitioning}
       >
         <ChevronLeft size={24} />
       </Button>
       
+      <Button
+        variant="ghost"
+        size="icon"
+        className={`absolute right-4 top-1/2 transform -translate-y-1/2 ${textColor} opacity-50 hover:opacity-100 ${theme === 'light' ? 'hover:bg-gray-300' : 'hover:bg-gray-800'} z-50`}
+        onClick={handleNext}
+        disabled={currentElementIndex === presentationPath.length - 1 || isTransitioning}
+      >
+        <ChevronRight size={24} />
+      </Button>
+      
+      {/* Canvas container */}
       <div 
         className="relative w-full h-full overflow-hidden"
         style={{
@@ -401,13 +495,30 @@ const PresentationMode: React.FC = () => {
           backgroundImage: gridColor,
         }}
       >
+        {/* Global arrow marker definition */}
+        <svg style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden="true">
+          <defs>
+            <marker
+              id="presentation-arrowhead"
+              markerWidth="10"
+              markerHeight="7"
+              refX="9"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
+            </marker>
+          </defs>
+        </svg>
+        
+        {/* Canvas transformation container */}
         <div
           className="absolute top-0 left-0 transform origin-top-left transition-all ease-out"
           style={{
             transform: `translate(${-viewportPosition.x}px, ${-viewportPosition.y}px)`,
           }}
         >
-          {/* Render the canvas elements with focus on current element */}
+          {/* Canvas elements */}
           {currentCanvas.elements.map(element => (
             <div
               key={element.id}
@@ -417,7 +528,8 @@ const PresentationMode: React.FC = () => {
                 top: element.y,
                 width: element.width,
                 height: element.height,
-                opacity: element.type === 'arrow' ? 0.7 : 1,
+                opacity: 1,
+                zIndex: element.type === 'arrow' ? 0 : 1
               }}
             >
               {element.type === 'card' && (
@@ -451,9 +563,18 @@ const PresentationMode: React.FC = () => {
                   {element.content}
                 </div>
               )}
-              {/* Add drawing element support */}
+              
               {element.type === 'drawing' && element.points && element.points.length > 0 && (
-                <svg className="w-full h-full pointer-events-none">
+                <svg 
+                  className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+                  style={{
+                    left: 0, 
+                    top: 0, 
+                    width: '100%', 
+                    height: '100%',
+                    overflow: 'visible'
+                  }}
+                >
                   <polyline
                     points={element.points.map(p => `${p.x},${p.y}`).join(' ')}
                     fill="none"
@@ -465,8 +586,7 @@ const PresentationMode: React.FC = () => {
                   />
                 </svg>
               )}
-
-              {/* Add shape element support */}
+              
               {element.type === 'shape' && (
                 <svg className="w-full h-full pointer-events-none">
                   {element.shapeType === 'circle' && (
@@ -498,138 +618,112 @@ const PresentationMode: React.FC = () => {
                   )}
                 </svg>
               )}
-              
-              {/* Simplified arrow rendering for presentation */}
-              {element.type === 'arrow' && element.fromId && element.toId && (
-                <svg
-                  className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                  style={{
-                    left: 0,
-                    top: 0,
-                    width: '100vw',
-                    height: '100vh',
-                    position: 'fixed',
-                    zIndex: 5,
-                    opacity: 0.7
-                  }}
-                >
-                  {(() => {
-                    const fromElement = currentCanvas.elements.find(el => el.id === element.fromId);
-                    const toElement = currentCanvas.elements.find(el => el.id === element.toId);
-                    
-                    if (!fromElement || !toElement) return null;
-                    
-                    // Calculate center points
-                    const fromCenterX = fromElement.x + (fromElement.width || 0) / 2;
-                    const fromCenterY = fromElement.y + (fromElement.height || 0) / 2;
-                    const toCenterX = toElement.x + (toElement.width || 0) / 2;
-                    const toCenterY = toElement.y + (toElement.height || 0) / 2;
-                    
-                    // Calculate direction vector
-                    const dx = toCenterX - fromCenterX;
-                    const dy = toCenterY - fromCenterY;
-                    const len = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (len === 0) return null;
-                    
-                    const nx = dx / len;
-                    const ny = dy / len;
-                    
-                    // Find intersection points with element boundaries
-                    const fromWidth = fromElement.width || 0;
-                    const fromHeight = fromElement.height || 0;
-                    const toWidth = toElement.width || 0;
-                    const toHeight = toElement.height || 0;
-                    
-                    // Calculate intersection with from element
-                    let fromX, fromY;
-                    
-                    if (Math.abs(nx) * fromHeight > Math.abs(ny) * fromWidth) {
-                      // Intersect with left or right side
-                      const side = nx > 0 ? 1 : -1;
-                      fromX = fromCenterX + side * fromWidth / 2;
-                      fromY = fromCenterY + (ny / nx) * side * fromWidth / 2;
-                    } else {
-                      // Intersect with top or bottom side
-                      const side = ny > 0 ? 1 : -1;
-                      fromY = fromCenterY + side * fromHeight / 2;
-                      fromX = fromCenterX + (nx / ny) * side * fromHeight / 2;
-                    }
-                    
-                    // Calculate intersection with to element
-                    let toX, toY;
-                    
-                    if (Math.abs(nx) * toHeight > Math.abs(ny) * toWidth) {
-                      // Intersect with left or right side
-                      const side = nx > 0 ? -1 : 1;
-                      toX = toCenterX + side * toWidth / 2;
-                      toY = toCenterY + (ny / nx) * side * toWidth / 2;
-                    } else {
-                      // Intersect with top or bottom side
-                      const side = ny > 0 ? -1 : 1;
-                      toY = toCenterY + side * toHeight / 2;
-                      toX = toCenterX + (nx / ny) * side * toHeight / 2;
-                    }
-                    
-                    const highlightCurrentConnection = 
-                      (presentationPath[currentElementIndex] === element.fromId && 
-                       presentationPath[currentElementIndex + 1] === element.toId);
-                    
-                    // Use appropriate arrow color based on theme
-                    const arrowColor = element.color || (theme === 'light' ? '#555555' : '#FFFFFF');
-                    
-                    return (
-                      <>
-                        <line
-                          x1={fromX}
-                          y1={fromY}
-                          x2={toX}
-                          y2={toY}
-                          stroke={arrowColor}
-                          strokeWidth={highlightCurrentConnection ? 4 : 2}
-                          markerEnd="url(#arrowhead)"
-                          strokeDasharray={highlightCurrentConnection ? "none" : "5,5"}
-                        />
-                        <defs>
-                          <marker
-                            id="arrowhead"
-                            markerWidth="10"
-                            markerHeight="7"
-                            refX="9"
-                            refY="3.5"
-                            orient="auto"
-                          >
-                            <polygon
-                              points="0 0, 10 3.5, 0 7"
-                              fill={arrowColor}
-                            />
-                          </marker>
-                        </defs>
-                      </>
-                    );
-                  })()}
-                </svg>
-              )}
             </div>
           ))}
+          
+          {/* ARROW OVERLAY LAYER - Separate to ensure arrows appear above elements */}
+          <svg 
+            className="absolute top-0 left-0 w-full h-full"
+            style={{
+              position: 'absolute',
+              width: '100000px', 
+              height: '100000px',
+              overflow: 'visible',
+              zIndex: 20,
+              pointerEvents: 'none'
+            }}
+          >
+            {currentCanvas.elements
+              .filter(element => element.type === 'arrow' && element.fromId && element.toId)
+              .map(arrow => {
+                const fromElement = currentCanvas.elements.find(el => el.id === arrow.fromId);
+                const toElement = currentCanvas.elements.find(el => el.id === arrow.toId);
+                
+                if (!fromElement || !toElement) return null;
+                
+                // Calculate center points
+                const fromCenterX = fromElement.x + (fromElement.width || 0) / 2;
+                const fromCenterY = fromElement.y + (fromElement.height || 0) / 2;
+                const toCenterX = toElement.x + (toElement.width || 0) / 2;
+                const toCenterY = toElement.y + (toElement.height || 0) / 2;
+                
+                // Calculate direction vector
+                const dx = toCenterX - fromCenterX;
+                const dy = toCenterY - fromCenterY;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                
+                if (len === 0) return null;
+                
+                const nx = dx / len;
+                const ny = dy / len;
+                
+                // Find intersection points with element boundaries
+                const fromWidth = fromElement.width || 0;
+                const fromHeight = fromElement.height || 0;
+                const toWidth = toElement.width || 0;
+                const toHeight = toElement.height || 0;
+                
+                // Calculate intersection with from element
+                let fromX, fromY;
+                
+                if (Math.abs(nx) * fromHeight > Math.abs(ny) * fromWidth) {
+                  // Intersect with left or right side
+                  const side = nx > 0 ? 1 : -1;
+                  fromX = fromCenterX + side * fromWidth / 2;
+                  fromY = fromCenterY + (ny / nx) * side * fromWidth / 2;
+                } else {
+                  // Intersect with top or bottom side
+                  const side = ny > 0 ? 1 : -1;
+                  fromY = fromCenterY + side * fromHeight / 2;
+                  fromX = fromCenterX + (nx / ny) * side * fromHeight / 2;
+                }
+                
+                // Calculate intersection with to element
+                let toX, toY;
+                
+                if (Math.abs(nx) * toHeight > Math.abs(ny) * toWidth) {
+                  // Intersect with left or right side
+                  const side = nx > 0 ? -1 : 1;
+                  toX = toCenterX + side * toWidth / 2;
+                  toY = toCenterY + (ny / nx) * side * toWidth / 2;
+                } else {
+                  // Intersect with top or bottom side
+                  const side = ny > 0 ? -1 : 1;
+                  toY = toCenterY + side * toHeight / 2;
+                  toX = toCenterX + (nx / ny) * side * toHeight / 2;
+                }
+                
+                const highlightCurrentConnection = 
+                  (presentationPath[currentElementIndex] === arrow.fromId && 
+                  presentationPath[currentElementIndex + 1] === arrow.toId);
+                
+                // Use appropriate arrow color based on theme
+                const arrowColor = arrow.color || (theme === 'light' ? '#555555' : '#FFFFFF');
+                
+                return (
+                  <line
+                    key={`arrow-${arrow.id}`}
+                    x1={fromX}
+                    y1={fromY}
+                    x2={toX}
+                    y2={toY}
+                    stroke={arrowColor}
+                    strokeWidth={highlightCurrentConnection ? 2 : 1}
+                    markerEnd="url(#presentation-arrowhead)"
+                    strokeDasharray={highlightCurrentConnection ? "none" : "5,5"}
+                    style={{ color: arrowColor }}
+                  />
+                );
+              })}
+          </svg>
         </div>
       </div>
       
-      <Button
-        variant="ghost"
-        size="icon"
-        className={`absolute right-4 top-1/2 transform -translate-y-1/2 ${textColor} opacity-50 hover:opacity-100 ${theme === 'light' ? 'hover:bg-gray-300' : 'hover:bg-gray-800'} z-10`}
-        onClick={handleNext}
-        disabled={currentElementIndex === presentationPath.length - 1 || isTransitioning}
-      >
-        <ChevronRight size={24} />
-      </Button>
-      
-      <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 ${textColor} ${theme === 'light' ? 'bg-gray-200' : 'bg-black'} bg-opacity-50 px-3 py-1 rounded-full`}>
+      {/* Slide counter */}
+      <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 ${textColor} ${theme === 'light' ? 'bg-gray-200' : 'bg-black'} bg-opacity-50 px-3 py-1 rounded-full z-50`}>
         {currentElementIndex + 1} / {presentationPath.length}
       </div>
     </div>
   );
 };
-
 export default PresentationMode;
