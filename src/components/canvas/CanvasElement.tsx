@@ -429,13 +429,21 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               cursor: readOnly ? 'default' : 'move',
               position: 'absolute'
             }}
-            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
-            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onMouseDown={(e) => { 
+              e.preventDefault(); // Prevent browser drag operation
+              if (!readOnly) onSelectElement(element.id); 
+            }}
+            onTouchStart={(e) => { 
+              e.preventDefault(); // Prevent browser drag operation
+              if (!readOnly) onSelectElement(element.id); 
+            }}
           >
             <img
               src={element.imageUrl}
               alt="Canvas element"
               className="w-full h-full object-contain"
+              draggable="false" // Prevent default browser dragging
+              onDragStart={(e) => e.preventDefault()} // Additional protection
             />
             {renderResizeHandle()}
             {selected && renderControlsMenu()}
