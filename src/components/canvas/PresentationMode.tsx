@@ -4,11 +4,13 @@ import { useCanvas, CanvasElement } from '@/contexts/CanvasContext';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X, Maximize, Grid } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const TRANSITION_DURATION = 800; // ms
 
 const PresentationMode: React.FC = () => {
   const { currentCanvas } = useCanvas();
+  const { theme } = useTheme();
   const navigate = useNavigate();
   
   const [currentElementIndex, setCurrentElementIndex] = useState(0);
@@ -23,6 +25,13 @@ const PresentationMode: React.FC = () => {
   
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
+  
+  // Determine background and foreground colors based on theme
+  const bgColor = theme === 'light' ? 'bg-gray-100' : 'bg-gray-900';
+  const textColor = theme === 'light' ? 'text-gray-900' : 'text-white';
+  const gridColor = theme === 'light' 
+    ? 'linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px)'
+    : 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)';
   
   useEffect(() => {
     if (!currentCanvas) return;
@@ -263,7 +272,7 @@ const PresentationMode: React.FC = () => {
   
   if (!currentCanvas || !currentElement) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
+      <div className={`h-screen flex items-center justify-center ${bgColor} ${textColor}`}>
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">No presentation content available</h2>
           <Button onClick={handleExit}>
@@ -277,13 +286,13 @@ const PresentationMode: React.FC = () => {
   if (showOverview) {
     // Show a grid of all slides (cards and images)
     return (
-      <div className="h-screen w-screen overflow-hidden bg-gray-900 flex flex-col">
-        <div className="flex justify-between items-center p-4 bg-gray-800">
-          <h2 className="text-white text-xl font-semibold">Presentation Overview</h2>
+      <div className={`h-screen w-screen overflow-hidden ${bgColor} flex flex-col`}>
+        <div className={`flex justify-between items-center p-4 ${theme === 'light' ? 'bg-gray-200' : 'bg-gray-800'}`}>
+          <h2 className={textColor + " text-xl font-semibold"}>Presentation Overview</h2>
           <Button 
             variant="outline"
             size="sm"
-            className="text-white border-white hover:bg-gray-700"
+            className={textColor + ` ${theme === 'light' ? 'border-gray-400 hover:bg-gray-300' : 'border-white hover:bg-gray-700'}`}
             onClick={() => setShowOverview(false)}
           >
             Back to Presentation
@@ -325,7 +334,7 @@ const PresentationMode: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <div className="text-white text-center mt-1">Slide {index + 1}</div>
+                  <div className={textColor + " text-center mt-1"}>Slide {index + 1}</div>
                 </div>
               );
             })}
@@ -337,14 +346,14 @@ const PresentationMode: React.FC = () => {
   
   // Render the canvas view with transitions
   return (
-    <div className="h-screen w-screen overflow-hidden bg-gray-900 flex items-center justify-center relative">
+    <div className={`h-screen w-screen overflow-hidden ${bgColor} flex items-center justify-center relative`}>
       <div 
         className="absolute top-4 right-4 flex space-x-2 z-10"
       >
         <Button 
           variant="outline" 
           size="sm" 
-          className="text-white border-white hover:bg-gray-800"
+          className={`${textColor} ${theme === 'light' ? 'border-gray-400 hover:bg-gray-300' : 'border-white hover:bg-gray-800'}`}
           onClick={handleOverviewToggle}
           title="Overview (G)"
         >
@@ -354,7 +363,7 @@ const PresentationMode: React.FC = () => {
         <Button 
           variant="outline" 
           size="sm" 
-          className="text-white border-white hover:bg-gray-800"
+          className={`${textColor} ${theme === 'light' ? 'border-gray-400 hover:bg-gray-300' : 'border-white hover:bg-gray-800'}`}
           onClick={toggleFullscreen}
           title="Fullscreen (F)"
         >
@@ -364,7 +373,7 @@ const PresentationMode: React.FC = () => {
         <Button 
           variant="outline"
           size="sm"
-          className="text-white border-white hover:bg-gray-800"
+          className={`${textColor} ${theme === 'light' ? 'border-gray-400 hover:bg-gray-300' : 'border-white hover:bg-gray-800'}`}
           onClick={handleExit}
           title="Exit (Esc)"
         >
@@ -375,7 +384,7 @@ const PresentationMode: React.FC = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white opacity-50 hover:opacity-100 hover:bg-gray-800 z-10"
+        className={`absolute left-4 top-1/2 transform -translate-y-1/2 ${textColor} opacity-50 hover:opacity-100 ${theme === 'light' ? 'hover:bg-gray-300' : 'hover:bg-gray-800'} z-10`}
         onClick={handlePrevious}
         disabled={currentElementIndex === 0 || isTransitioning}
       >
@@ -386,7 +395,7 @@ const PresentationMode: React.FC = () => {
         className="relative w-full h-full overflow-hidden"
         style={{
           backgroundSize: '30px 30px',
-          backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)',
+          backgroundImage: gridColor,
         }}
       >
         <div
@@ -431,9 +440,9 @@ const PresentationMode: React.FC = () => {
                 <div 
                   className="p-2 rounded"
                   style={{
-                    color: element.color || '#ffffff',
+                    color: element.color || (theme === 'light' ? '#000000' : '#ffffff'),
                     fontSize: element.fontSize ? `${element.fontSize * 1.5}px` : '24px',
-                    textShadow: '0 0 5px rgba(0,0,0,0.7)'
+                    textShadow: theme === 'dark' ? '0 0 5px rgba(0,0,0,0.7)' : 'none'
                   }}
                 >
                   {element.content}
@@ -516,6 +525,9 @@ const PresentationMode: React.FC = () => {
                       (presentationPath[currentElementIndex] === element.fromId && 
                        presentationPath[currentElementIndex + 1] === element.toId);
                     
+                    // Use appropriate arrow color based on theme
+                    const arrowColor = element.color || (theme === 'light' ? '#555555' : '#FFFFFF');
+                    
                     return (
                       <>
                         <line
@@ -523,7 +535,7 @@ const PresentationMode: React.FC = () => {
                           y1={fromY}
                           x2={toX}
                           y2={toY}
-                          stroke={element.color || '#FFFFFF'}
+                          stroke={arrowColor}
                           strokeWidth={highlightCurrentConnection ? 4 : 2}
                           markerEnd="url(#arrowhead)"
                           strokeDasharray={highlightCurrentConnection ? "none" : "5,5"}
@@ -539,7 +551,7 @@ const PresentationMode: React.FC = () => {
                           >
                             <polygon
                               points="0 0, 10 3.5, 0 7"
-                              fill={element.color || '#FFFFFF'}
+                              fill={arrowColor}
                             />
                           </marker>
                         </defs>
@@ -556,14 +568,14 @@ const PresentationMode: React.FC = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white opacity-50 hover:opacity-100 hover:bg-gray-800 z-10"
+        className={`absolute right-4 top-1/2 transform -translate-y-1/2 ${textColor} opacity-50 hover:opacity-100 ${theme === 'light' ? 'hover:bg-gray-300' : 'hover:bg-gray-800'} z-10`}
         onClick={handleNext}
         disabled={currentElementIndex === presentationPath.length - 1 || isTransitioning}
       >
         <ChevronRight size={24} />
       </Button>
       
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 px-3 py-1 rounded-full">
+      <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 ${textColor} ${theme === 'light' ? 'bg-gray-200' : 'bg-black'} bg-opacity-50 px-3 py-1 rounded-full`}>
         {currentElementIndex + 1} / {presentationPath.length}
       </div>
     </div>
