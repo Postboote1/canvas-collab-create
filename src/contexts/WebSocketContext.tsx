@@ -173,6 +173,9 @@ const initializePeerFunc = (
   });
 };
 
+
+// Global connection registry to ensure we can access connections anywhere
+let globalConnections = [];
 // Provider component
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // State variables
@@ -189,7 +192,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [syncComplete, setSyncComplete] = useState(false);
   const [canvasStateSynced, setCanvasStateSynced] = useState(false);
   const { user } = useAuth();
-  
+
   // Add persistent peer reference
   const peerRef = useRef<Peer | null>(null);
   const processedElementIDs = useRef<Set<string>>(new Set());
@@ -235,6 +238,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       localStorage.setItem('globalElementRegistry', JSON.stringify([]));
     }
   }, []);
+
+    // Update the connection tracking to use the global registry
+  useEffect(() => {
+    globalConnections = connections;
+  }, [connections]);
+    
   
   // Register a handler for a specific message type
   const registerHandler = useCallback((type: string, handler: MessageHandler) => {
@@ -286,8 +295,17 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setupConnection = useCallback((conn: DataConnection) => {
     console.log('Setting up connection with peer:', conn.peer);
     
-    // Store the connection for later use
-    setConnections(prev => [...prev, conn]);
+    // Make connection available globally right away
+    globalConnections.push(conn);
+    
+    // Also update React state
+    setConnections(prev => {
+      // Don't add duplicates
+      if (prev.some(c => c && c.peer === conn.peer)) {
+        return prev;
+      }
+      return [...prev, conn];
+    });
     
     // Listen for data from this connection
     conn.on('data', (data: any) => {
@@ -407,6 +425,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Request canvas state when connection is established
       conn.send({
         type: 'requestCanvasState',
+        payload: { sender: peerId },  // Use payload.sender consistently
         sender: peerId,
         timestamp: Date.now()
       });
@@ -560,8 +579,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
   
-    setIsLoading(true);
-    localStorage.removeItem('pendingCanvasState'); // Clear any old canvas data
+    //setIsLoading(true);
+    //localStorage.removeItem('pendingCanvasState'); // Clear any old canvas data
   
     try {
       if (!isPeerInitialized || !peerRef.current || peerRef.current.destroyed) {
@@ -919,27 +938,30 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // 1. Update the requestCanvasState handler to correctly send the current canvas with elements
     const unregisterRequestState = registerHandler('requestCanvasState', (payload) => {
       console.log('Received request for canvas state:', payload);
-      
+  
       // First check localStorage for any canvas data to share
       let canvasToSend = null;
       
       try {
-        // Try to get canvas from current context - this should have the most up-to-date content
-        if (currentCanvas) {
-          console.log('Sending current canvas from context:', currentCanvas);
+        // CRITICAL: Always prioritize the current canvas from localStorage first
+        const pendingCanvasStr = localStorage.getItem('pendingCanvasState');
+        if (pendingCanvasStr) {
+          try {
+            const pendingCanvas = JSON.parse(pendingCanvasStr);
+            if (pendingCanvas && pendingCanvas.elements) {
+              console.log('Sending canvas from localStorage with elements:', pendingCanvas.elements.length);
+              // Deep clone to avoid reference issues
+              canvasToSend = JSON.parse(JSON.stringify(pendingCanvas));
+            }
+          } catch (err) {
+            console.error('Error parsing pendingCanvasState:', err);
+          }
+        }
+        // Try to get canvas from current context as fallback
+        if (!canvasToSend && currentCanvas) {
+          console.log('Sending current canvas from context with elements:', currentCanvas.elements?.length || 0);
           // Deep clone the canvas to avoid reference issues
           canvasToSend = JSON.parse(JSON.stringify(currentCanvas));
-        } else {
-          // Try to get canvas from local storage as fallback
-          const savedCanvases = localStorage.getItem('global_canvases');
-          if (savedCanvases) {
-            const allCanvases = JSON.parse(savedCanvases);
-            if (Array.isArray(allCanvases) && allCanvases.length > 0) {
-              // Get the most recent canvas
-              canvasToSend = JSON.parse(JSON.stringify(allCanvases[allCanvases.length - 1]));
-              console.log('Sending canvas from localStorage:', canvasToSend);
-            }
-          }
         }
       } catch (err) {
         console.error('Error getting canvas data to share:', err);
@@ -952,121 +974,128 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           id: `shared-${Date.now()}`,
           name: 'Shared Canvas',
           elements: [],
-          createdBy: 'shared',
+          createdBy: 'shared', 
           createdAt: new Date().toISOString(),
           joinCode: '',
           isInfinite: true
         };
       }
       
-      console.log('Sending canvas state to peer:', canvasToSend);
+      console.log(`Attempting to send canvas to requester with ${canvasToSend.elements?.length || 0} elements`);
       
-      // Find the connection that sent this request
-      const requestingConn = connections.find(conn => 
-        conn && conn.peer === (payload?.sender || '')
-      );
+      // IMPORTANT: Force send to the requester via all possible connections
+      const requesterId = payload?.sender || '';
+      let messageSent = false;
       
-      if (requestingConn && requestingConn.open) {
-        requestingConn.send({
-          type: 'canvasState',
-          payload: canvasToSend,
-          sender: peerId,
-          timestamp: Date.now()
-        });
-      } else {
-        // Fallback - send to all connections
-        console.log('Sending canvas state to all connections');
-        connections.forEach(conn => {
-          if (conn && conn.open) {
+      connections.forEach(conn => {
+        if (conn && conn.open) {
+          try {
+            console.log(`Sending canvas to connection: ${conn.peer}`);
             conn.send({
               type: 'canvasState',
               payload: canvasToSend,
               sender: peerId,
               timestamp: Date.now()
             });
+            messageSent = true;
+          } catch (err) {
+            console.error('Error sending canvas state to peer:', err);
           }
-        });
+        }
+      });
+      
+      if (!messageSent) {
+        console.warn('Could not find any open connections to send canvas');
       }
     });
+    
 
     const unregisterCanvasState = registerHandler('canvasState', (payload) => {
       console.log('Received canvas state:', payload);
-      
+
       if (!payload) {
         console.error('Received empty canvas state');
         return;
       }
       
       try {
-        // Ensure we have all elements with proper coordinates
-        const elements = Array.isArray(payload.elements) ? payload.elements.map(element => ({
+        // Load existing canvas from localStorage first
+        let existingCanvas = null;
+        let existingElements = [];
+        
+        try {
+          const pendingCanvasStr = localStorage.getItem('pendingCanvasState');
+          if (pendingCanvasStr) {
+            existingCanvas = JSON.parse(pendingCanvasStr);
+            if (existingCanvas && Array.isArray(existingCanvas.elements)) {
+              existingElements = existingCanvas.elements;
+              console.log('Found existing canvas with', existingElements.length, 'elements');
+            }
+          }
+        } catch (err) {
+          console.error('Error reading existing canvas:', err);
+        }
+        
+        // Ensure we have valid elements from the incoming payload
+        const incomingElements = Array.isArray(payload.elements) ? payload.elements.map(element => ({
           ...element,
           x: typeof element.x === 'number' ? element.x : 0,
           y: typeof element.y === 'number' ? element.y : 0,
           id: element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
         })) : [];
         
-        // Create a valid canvas object from the payload
-        const canvasData = {
-          id: payload.id || `shared-${Date.now()}`,
-          name: payload.name || 'Shared Canvas',
-          elements: elements,
-          createdBy: payload.createdBy || 'shared',
-          createdAt: payload.createdAt || new Date().toISOString(),
-          joinCode: payload.joinCode || '',
-          isInfinite: payload.isInfinite === undefined ? true : payload.isInfinite
-        };
+        console.log(`Received ${incomingElements.length} elements from peer`);
         
-        console.log('Saving received canvas state with elements:', elements.length);
-        
-        // First check if we already have a canvas state with elements
-        const pendingCanvas = localStorage.getItem('pendingCanvasState');
-        if (pendingCanvas) {
-          try {
-            const existingCanvas = JSON.parse(pendingCanvas);
-            if (existingCanvas && existingCanvas.elements && existingCanvas.elements.length > 0) {
-              console.log('Merging with existing canvas that has', existingCanvas.elements.length, 'elements');
-              
-              // Keep existing canvas settings but merge the elements
-              // Use a Set of IDs to avoid duplicates
-              const elementIds = new Set();
-              const mergedElements = [];
-              
-              // Add existing elements first
-              for (const el of existingCanvas.elements) {
-                if (el.id && !elementIds.has(el.id)) {
-                  elementIds.add(el.id);
-                  mergedElements.push(el);
-                }
-              }
-              
-              // Add incoming elements if not already included
-              for (const el of elements) {
-                if (el.id && !elementIds.has(el.id)) {
-                  elementIds.add(el.id);
-                  mergedElements.push(el);
-                }
-              }
-              
-              canvasData.elements = mergedElements;
-              console.log('Merged canvas now has', mergedElements.length, 'elements');
-            }
-          } catch (error) {
-            console.error('Error merging canvas states:', error);
-          }
+        // CRITICAL FIX: Don't replace existing canvas with empty one from new joiners
+        if (incomingElements.length === 0 && existingElements.length > 0) {
+          console.log('PRESERVING EXISTING CANVAS: Received empty canvas from joiner but have existing content');
+          return; // Skip updating altogether - keep our canvas
         }
         
-        // Store in localStorage for persistence
+        // We'll use a Map to merge elements by ID
+        const elementMap = new Map();
+        
+        // First add all existing elements
+        existingElements.forEach(el => {
+          if (el && el.id) elementMap.set(el.id, el);
+        });
+        
+        // Then add incoming elements if they don't already exist
+        incomingElements.forEach(el => {
+          if (el && el.id && !elementMap.has(el.id)) {
+            elementMap.set(el.id, el);
+          }
+        });
+        
+        // Convert back to array
+        const mergedElements = Array.from(elementMap.values());
+        console.log(`MERGED RESULT: ${existingElements.length} existing + ${incomingElements.length} incoming = ${mergedElements.length} total elements`);
+        
+        // Create the final canvas object
+        const canvasData = {
+          // IMPORTANT: Preserve original canvas name and properties
+          id: (existingCanvas && existingCanvas.id) || payload.id || `shared-${Date.now()}`,
+          name: (existingCanvas && existingCanvas.name) || payload.name || 'Shared Canvas',
+          elements: mergedElements,
+          createdBy: (existingCanvas && existingCanvas.createdBy) || payload.createdBy || 'shared',
+          createdAt: (existingCanvas && existingCanvas.createdAt) || payload.createdAt || new Date().toISOString(),
+          joinCode: (existingCanvas && existingCanvas.joinCode) || payload.joinCode || '',
+          isInfinite: (existingCanvas && existingCanvas.isInfinite !== undefined) ? 
+                     existingCanvas.isInfinite : 
+                     (payload.isInfinite === undefined ? true : payload.isInfinite)
+        };
+        
+        // Save to localStorage first, then update state
+        console.log(`Saving merged canvas with ${mergedElements.length} elements`);
         localStorage.setItem('pendingCanvasState', JSON.stringify(canvasData));
         
-        // Set the canvas in the current context
-        setCurrentCanvas(canvasData);
+        // Use setTimeout to break potential circular updates
+        setTimeout(() => {
+          setCanvasStateSynced(true);
+          setCurrentCanvas(canvasData);
+          toast.success(`Canvas synced with ${mergedElements.length} elements`);
+        }, 20);
         
-        // Mark the sync as complete
-        setCanvasStateSynced(true);
-        
-        // Toast notification
-        toast.success('Canvas data received with ' + canvasData.elements.length + ' elements');
       } catch (error) {
         console.error('Error processing canvas data:', error);
         toast.error('Failed to process canvas data');
