@@ -109,7 +109,23 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
                 x: typeof payload.element.x === 'number' ? payload.element.x : 0,
                 y: typeof payload.element.y === 'number' ? payload.element.y : 0
               };
-              
+              const elementTrackingKey = elementToAdd.id;
+
+            // Check both ID and position to identify duplicates
+              const isDuplicate = canvas.elements.some(el => {
+              const idMatch = el.id === elementToAdd.id;
+                // For exact duplicates, also check for similar coordinates (within 2 pixels)
+              const positionMatch = idMatch || 
+                (Math.abs((el.x || 0) - (elementToAdd.x || 0)) < 2 && 
+                Math.abs((el.y || 0) - (elementToAdd.y || 0)) < 2 && 
+                (el._source === elementToAdd._source));
+                return idMatch || positionMatch;
+              });
+
+              if (isDuplicate) {
+                console.log(`Element ${elementToAdd.id} already exists in canvas or is a duplicate, skipping`);
+                return;
+              }
               // Check if element already exists
               const elementExists = canvas.elements.some(el => el.id === elementToAdd.id);
               if (elementExists) {

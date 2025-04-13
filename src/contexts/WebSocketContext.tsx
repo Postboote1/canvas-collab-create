@@ -721,22 +721,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Process the operation locally first
       if (currentCanvas && message.payload.operation === 'add' && message.payload.element) {
-        if (message.payload.operation === 'add' && message.payload.element) {
-          // Ensure the element has an ID
-          if (!message.payload.element.id) {
-            message.payload.element.id = `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-          }
-          
-          // Mark this element as processed locally BEFORE processing
-          const elementId = message.payload.element.id;
-          addedElementIds.current.add(elementId);
-          
-          // Also add to global registry
-          const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
-          if (!registry.includes(elementId)) {
-            registry.push(elementId);
-            localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
-          }
+        // Ensure the element has an ID and source tracking
+        const elementId = message.payload.element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        message.payload.element.id = elementId;
+        
+        // Critical: Add a source marker to identify where this element came from
+        message.payload.element._source = peerId;
+        
+        // Mark this element as processed locally BEFORE processing
+        addedElementIds.current.add(elementId);
+        
+        // Also add to global registry
+        const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
+        if (!registry.includes(elementId)) {
+          registry.push(elementId);
+          localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
         }
         
         // Add source identification
@@ -1109,6 +1108,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const elementId = payload.element.id || 
             `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
           
+          const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
+
           // FIRST DEDUPLICATION CHECK: Check our in-memory set for this session
           if (addedElementIds.current.has(elementId)) {
             console.log(`DEDUPLICATION: Element ${elementId} already processed in this session`);
@@ -1116,35 +1117,46 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
           
           // SECOND CHECK: Check the global registry in localStorage
-          const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
-          if (registry.includes(elementId)) {
-            console.log(`GLOBAL REGISTRY: Element ${elementId} already exists, skipping add`);
-            return;
+          if (payload.sender === peerId || payload.element._source === peerId) {
+            console.log(`STRICT DEDUPLICATION: Element ${elementId} created by this device, skipping completely`);
+            // Still add to tracking to prevent future duplicates
+            addedElementIds.current.add(elementId);
+            const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
+            if (!registry.includes(elementId)) {
+              registry.push(elementId);
+              localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+            }
+            return; // Critical: Exit early
           }
           
           // THIRD CHECK: Verify against current canvas state
           const elementExists = currentCanvasData.elements.some(el => el.id === elementId);
           if (elementExists) {
-            console.log(`Element ${elementId} already exists in canvas, adding to tracking`);
-            
-            // Still add to our tracking to prevent future duplicates
+            console.log(`STRICT DEDUPLICATION: Element ${elementId} already exists in canvas, skipping completely`);
+            // Still add to tracking to prevent future duplicates
             addedElementIds.current.add(elementId);
-            registry.push(elementId);
-            localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
-            return;
+            const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
+            if (!registry.includes(elementId)) {
+              registry.push(elementId);
+              localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+            }
+            return; // Critical: Exit early
           }
           
           // Add to tracking BEFORE adding the element
           addedElementIds.current.add(elementId);
-          registry.push(elementId);
-          localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+          if (!registry.includes(elementId)) {
+            registry.push(elementId);
+            localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
+          }
           console.log(`Added element ${elementId} to tracking registries`);
           
           // Add the element to the canvas
           const updatedCanvas = {
             ...currentCanvasData,
             elements: [
-              ...currentCanvasData.elements,
+              // Filter out any existing elements with the same ID before adding the new one
+              ...currentCanvasData.elements.filter(el => el.id !== elementId),
               {
                 ...payload.element,
                 id: elementId,

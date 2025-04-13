@@ -782,8 +782,13 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         >
           {/* Content container for elements and temporary drawing */}
           <div ref={contentRef} className="absolute top-0 left-0" style={{ width: '100%', height: '100%' }}>
-            {/* Render canvas elements */}
-            {currentCanvas?.elements.map(element => (
+          {currentCanvas?.elements
+            // deduplicate by ID to prevent React warnings
+            .filter((element, index, self) => {
+              // Return the first occurrence of each element ID
+              return index === self.findIndex(e => e.id === element.id);
+            })
+            .map(element => (
               <CanvasElement
                 key={element.id}
                 element={element}

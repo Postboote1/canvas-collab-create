@@ -18,6 +18,7 @@ export interface CanvasElement {
   fromId?: string;
   toId?: string;
   shapeType?: 'circle' | 'triangle' | 'diamond';
+  _source?: string;
 }
 
 export interface Canvas {
