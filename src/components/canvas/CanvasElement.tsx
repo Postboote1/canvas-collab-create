@@ -159,7 +159,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     return (
       <div
         className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 cursor-se-resize z-10 rounded-bl flex items-center justify-center"
-        onMouseDown={handleResizeStart}
+        onMouseDown={handleResizeStart} // Keep stopPropagation here
         onTouchStart={(e) => {
           const touch = e.touches[0];
           if (touch) {
@@ -169,7 +169,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             });
             handleResizeStart(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
           }
-          e.stopPropagation();
+          e.stopPropagation(); // Keep stopPropagation here
         }}
       >
         <Maximize size={14} className="text-white" />
@@ -337,10 +337,8 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               position: 'absolute'
             }}
             onDoubleClick={handleDoubleClick}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             {isEditing ? (
               <textarea
@@ -358,7 +356,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               </div>
             )}
             {renderResizeHandle()}
-            {renderControlsMenu()}
+            {selected && renderControlsMenu()}
           </div>
         );
 
@@ -373,10 +371,8 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               position: 'absolute'
             }}
             onDoubleClick={handleDoubleClick}
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             {isEditing ? (
               <textarea
@@ -433,14 +429,8 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               cursor: readOnly ? 'default' : 'move',
               position: 'absolute'
             }}
-            onMouseDown={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
-            onTouchStart={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             <img
               src={element.imageUrl}
@@ -448,7 +438,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               className="w-full h-full object-contain"
             />
             {renderResizeHandle()}
-            {renderControlsMenu()}
+            {selected && renderControlsMenu()}
           </div>
         );
 
@@ -503,14 +493,8 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               cursor: readOnly ? 'default' : 'move',
               position: 'absolute'
             }}
-            onMouseDown={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
-            onTouchStart={(e) => { 
-              e.stopPropagation(); 
-              if (!readOnly) onSelectElement(element.id); 
-            }}
+            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
           >
             <svg width="100%" height="100%" viewBox={`0 0 ${element.width || 100} ${element.height || 100}`}>
               {element.shapeType === 'circle' && (
@@ -524,7 +508,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               )}
             </svg>
             {renderResizeHandle()}
-            {renderControlsMenu()}
+            {selected && renderControlsMenu()}
           </div>
         );
 
