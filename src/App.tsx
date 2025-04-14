@@ -56,7 +56,7 @@ function App() {
                     <Route path="/canvas" element={<CanvasPage />} />
                     <Route path="/presentation" element={<PresentationMode />} />
                   </Routes>
-                  <Toaster position="top-right" />
+                  <Toaster position="bottom-right" />
                 </AnalyticsProvider>
               </ContextBridge>
             </CanvasProvider>

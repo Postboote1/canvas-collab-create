@@ -10,15 +10,10 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
   // Sync WebSocket context with Canvas context
   useEffect(() => {
     if (currentCanvas && setWebSocketCanvasState) {
-      // Only update if needed
-      setWebSocketCanvasState((prevState) => {
-        if (prevState?.id !== currentCanvas.id) {
-          return currentCanvas;
-        }
-        return prevState;
-      });
+      setWebSocketCanvasState(currentCanvas);
     }
-  }, [currentCanvas?.id, setWebSocketCanvasState]);
+  }, [currentCanvas, setWebSocketCanvasState]);
+
   // SINGLE canvasState handler
   useEffect(() => {
     if (!registerHandler) return;
