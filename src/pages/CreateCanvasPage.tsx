@@ -35,7 +35,8 @@ const CreateCanvasPage: React.FC = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    // Clear any pending canvas state in localStorage
+    localStorage.removeItem('pendingCanvasState');
     if (!name.trim()) {
       toast.error('Please enter a name for your canvas');
       return;

@@ -10,7 +10,7 @@ import { useCanvas } from '@/contexts/CanvasContext';
 
 const DashboardPage: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
-  const { userCanvases, loadCanvas } = useCanvas();
+  const { userCanvases, loadCanvas, deleteCanvas } = useCanvas();
   const navigate = useNavigate();
   
   // Redirect if not logged in
@@ -33,6 +33,24 @@ const DashboardPage: React.FC = () => {
     }
   };
   
+  const handleDeleteCanvas = async (id: string) => {
+    if (confirm("Are you sure you want to delete this canvas? This action cannot be undone.")) {
+      try {
+        const success = await deleteCanvas(id);
+        if (success) {
+          toast.success("Canvas deleted successfully");
+          // Force a reload of the page to update the UI
+          window.location.reload();
+        } else {
+          toast.error("Failed to delete canvas");
+        }
+      } catch (error) {
+        console.error("Error deleting canvas:", error);
+        toast.error("Failed to delete canvas");
+      }
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
   };
@@ -42,7 +60,7 @@ const DashboardPage: React.FC = () => {
   }
   
   return (
-    <Layout>
+    
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
@@ -109,6 +127,11 @@ const DashboardPage: React.FC = () => {
                       variant="outline"
                       size="sm"
                       className="text-red-500 border-red-200 hover:bg-red-50 flex items-center gap-1"
+                      onClick={() => {
+                        if(confirm("Are you sure you want to delete this canvas?")) {
+                          deleteCanvas(canvas.id);
+                        }
+                      }}
                     >
                       <Trash size={14} />
                       Delete
@@ -135,7 +158,7 @@ const DashboardPage: React.FC = () => {
           </div>
         )}
       </div>
-    </Layout>
+    
   );
 };
 

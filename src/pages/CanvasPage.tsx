@@ -83,18 +83,20 @@ const CanvasPage: React.FC = () => {
     // Don't declare state hooks inside useEffect
     const loadPendingCanvas = () => {
       try {
+        // Only load from pending canvas if we don't already have a valid canvas
+        // or if it appears to be the same canvas with updates
         const pendingCanvasState = localStorage.getItem('pendingCanvasState');
         
         if (pendingCanvasState) {
           const canvasData = JSON.parse(pendingCanvasState);
           console.log('Loading pending canvas state:', canvasData);
           
-          // Check if this canvas data has new elements
+          // Modified logic: Only load if it's clearly the same canvas with updates
+          // or if we have no canvas yet
           const shouldLoadPending = 
             !currentCanvas || 
-            (currentCanvas.id !== canvasData.id) || 
-            (canvasData.elements && canvasData.elements.length > (currentCanvas.elements?.length || 0)) ||
-            (lastLoadedCanvasId !== canvasData.id);
+            (currentCanvas && currentCanvas.id === canvasData.id && 
+             canvasData.elements && canvasData.elements.length >= (currentCanvas.elements?.length || 0));
           
           if (shouldLoadPending) {
             console.log('Setting canvas from pending state, elements count:', canvasData.elements.length);
@@ -102,7 +104,7 @@ const CanvasPage: React.FC = () => {
             setLastLoadedCanvasId(canvasData.id);
             
             toast.success(`Canvas "${canvasData.name}" loaded with ${canvasData.elements.length} elements`, {
-              id: 'canvas-loaded-toast', // Prevent duplicate toasts
+              id: 'canvas-loaded-toast',
               duration: 3000
             });
           }

@@ -1,29 +1,52 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Layout from '@/components/layout/Layout';
+import { pb } from '@/services/pocketbaseService';
 
 const RegisterPage: React.FC = () => {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [registrationAllowed, setRegistrationAllowed] = useState(true);
   
   const { register } = useAuth();
   const navigate = useNavigate();
   
+  useEffect(() => {
+    checkRegistrationSettings();
+  }, []);
+
+  const checkRegistrationSettings = async () => {
+    try {
+      const settings = await pb.getSettings();
+      setRegistrationAllowed(settings?.allowRegistration ?? true);
+    } catch (error) {
+      console.error("Failed to check registration settings:", error);
+      // Default to allowing registration if we can't check
+      setRegistrationAllowed(true);
+    }
+  };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!registrationAllowed) {
+      setError('Registration is currently disabled by the administrator');
+      return;
+    }
     
     // Reset error
     setError('');
     
     // Validation
-    if (!username || !password) {
+    if (!username || !email || !password) {
       setError('Please fill in all fields');
       return;
     }
@@ -39,16 +62,36 @@ const RegisterPage: React.FC = () => {
     }
     
     setIsLoading(true);
-    const success = await register(username, password);
+    const success = await register(username, email, password);
     setIsLoading(false);
     
     if (success) {
-      navigate('/dashboard');
+      navigate('/login');
     }
   };
   
+  if (!registrationAllowed) {
+    return (
+      <Layout>
+        <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-lg shadow-md">
+          <h1 className="text-2xl font-bold mb-6 text-center">Registration Disabled</h1>
+          <p className="text-center text-gray-600 mb-6">
+            New user registration is currently disabled by the administrator.
+          </p>
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => navigate('/login')}
+          >
+            Go to Login
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+  
   return (
-    <Layout>
+    
       <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-lg shadow-md">
         <h1 className="text-2xl font-bold mb-6 text-center">Create an Account</h1>
         
@@ -68,6 +111,19 @@ const RegisterPage: React.FC = () => {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </div>
+          
+          <div className="mb-4">
+            <label htmlFor="email" className="block text-sm font-medium mb-1">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
@@ -119,7 +175,7 @@ const RegisterPage: React.FC = () => {
           </p>
         </div>
       </div>
-    </Layout>
+    
   );
 };
 

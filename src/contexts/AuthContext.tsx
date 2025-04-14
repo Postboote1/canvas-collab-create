@@ -1,141 +1,168 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { pb } from '@/services/pocketbaseService';
 import { toast } from 'sonner';
 
 interface User {
   id: string;
   username: string;
-  isAdmin: boolean;
+  email: string;
+  role: 'user' | 'admin';
+  canvasLimit: number;
+  storageLimit: number;
+  currentStorage: number;
+  isEmailVerified: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
-  loading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
-  register: (username: string, password: string) => Promise<boolean>;
+  isAdmin: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (username: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoggedIn: () => boolean;
+  refreshUserData: () => Promise<void>;
+  canCreateCanvas: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Load user from localStorage on mount
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  
+  // Initialize user from stored auth
   useEffect(() => {
-    const storedUser = localStorage.getItem('canvasUser');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('canvasUser');
-      }
-    }
-    setLoading(false);
+    loadUserFromStorage();
   }, []);
-
-  // Mock login function - in a real app this would call an API
-  const login = async (username: string, password: string): Promise<boolean> => {
-    setLoading(true);
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // In a real app, this would be a server call to verify credentials
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
-      
-      const userMatch = users.find((u: any) => 
-        u.username === username && u.password === `hashed_${password}_salted`
-      );
-      
-      if (userMatch) {
-        const loggedInUser = {
-          id: userMatch.id,
-          username: userMatch.username,
-          isAdmin: userMatch.isAdmin || false
-        };
+  
+  const loadUserFromStorage = async () => {
+    if (pb.client.authStore.isValid) {
+      try {
+        const userData = await pb.client.collection('users').getOne(pb.client.authStore.model.id);
+        const isAdminUser = userData.role === 'admin';
         
-        setUser(loggedInUser);
-        localStorage.setItem('canvasUser', JSON.stringify(loggedInUser));
-        toast.success('Successfully logged in!');
-        return true;
-      } else {
-        toast.error('Invalid username or password');
-        return false;
+        setUser({
+          id: userData.id,
+          username: userData.username,
+          email: userData.email,
+          role: userData.role,
+          canvasLimit: userData.canvasLimit || 5,
+          storageLimit: userData.storageLimit || 26214400,
+          currentStorage: userData.currentStorage || 0,
+          isEmailVerified: userData.verified
+        });
+        
+        setIsAdmin(isAdminUser);
+      } catch (error) {
+        console.error("Error loading user from storage:", error);
+        logout();
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      toast.error('Failed to login. Please try again.');
-      return false;
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Mock register function
-  const register = async (username: string, password: string): Promise<boolean> => {
-    setLoading(true);
+  const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await pb.client.collection('users').authWithPassword(email, password);
       
-      // Get existing users
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
+      // Force refresh auth model from server to get latest role
+      try {
+        const userData = await pb.client.collection('users').getOne(pb.client.authStore.model.id);
+        pb.client.authStore.save(pb.client.authStore.token, userData);
+      } catch (e) {
+        console.error("Error refreshing user data:", e);
+      }
       
-      // Check if username already exists
-      if (users.some((u: any) => u.username === username)) {
-        toast.error('Username already exists');
+      await loadUserFromStorage();
+      toast.success('Login successful');
+      return true;
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error('Invalid credentials. Please try again.');
+      return false;
+    }
+  };
+
+  const register = async (username: string, email: string, password: string): Promise<boolean> => {
+    try {
+      // Check if registration is allowed
+      const settings = await pb.getSettings();
+      if (settings && settings.allowRegistration === false) {
+        toast.error('Registration is currently disabled by the administrator');
         return false;
       }
       
-      // Create new user
-      const newUser = {
-        id: `user_${Date.now()}`,
+      // Default values if settings are null
+      const canvasLimit = settings?.maxCanvasesPerUser || 5;
+      const storageLimit = settings?.maxStoragePerUser || 26214400;
+      
+      const data = {
         username,
-        password: `hashed_${password}_salted`, // This is a mock hash - use a real hash function in production
-        isAdmin: username === 'admin', // Simple way to create an admin account
-        canvases: []
+        email,
+        password,
+        passwordConfirm: password,
+        role: 'user',
+        canvasLimit,
+        storageLimit,
+        currentStorage: 0
       };
       
-      // Save to "database"
-      users.push(newUser);
-      localStorage.setItem('canvasUsers', JSON.stringify(users));
+      await pb.client.collection('users').create(data);
       
-      // Log the user in
-      const loggedInUser = {
-        id: newUser.id,
-        username: newUser.username,
-        isAdmin: newUser.isAdmin
-      };
+      // Request email verification
+      try {
+        await pb.client.collection('users').requestVerification(email);
+        toast.success('Registration successful! Please check your email to verify your account.');
+      } catch (verifyError) {
+        console.error("Verification request error:", verifyError);
+        toast.success('Registration successful! Email verification is currently unavailable.');
+      }
       
-      setUser(loggedInUser);
-      localStorage.setItem('canvasUser', JSON.stringify(loggedInUser));
-      toast.success('Account created successfully!');
       return true;
     } catch (error) {
-      console.error('Registration error:', error);
-      toast.error('Failed to register. Please try again.');
+      console.error("Registration error:", error);
+      toast.error('Registration failed. Please try again.');
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const logout = () => {
+    pb.client.authStore.clear();
     setUser(null);
-    localStorage.removeItem('canvasUser');
-    toast.success('Logged out successfully');
+    setIsAdmin(false);
   };
 
-  const isLoggedIn = () => !!user;
+  const isLoggedIn = () => {
+    return pb.client.authStore.isValid;
+  };
+  
+  const refreshUserData = async () => {
+    if (isLoggedIn()) {
+      await loadUserFromStorage();
+    }
+  };
+  
+  const canCreateCanvas = async (): Promise<boolean> => {
+    if (!user) return false;
+    
+    // Admins can always create canvases
+    if (user.role === 'admin') return true;
+    
+    const usage = await pb.getUserStorageUsage(user.id);
+    return usage.canvasCount < user.canvasLimit;
+  };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isLoggedIn }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      isAdmin, 
+      login, 
+      register, 
+      logout, 
+      isLoggedIn,
+      refreshUserData,
+      canCreateCanvas
+    }}>
       {children}
     </AuthContext.Provider>
   );

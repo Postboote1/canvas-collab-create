@@ -68,8 +68,54 @@ This will serve both:
 - `PORT`: Port for the Express server (default: 9000)
 - `NODE_ENV`: Set to 'production' for production mode
 
+# Deploying CanvasCollab with PocketBase
+
+## Prerequisites
+- Node.js 14+ and npm
+- A hosting service that supports Node.js
+- For production, a database backup strategy for PocketBase
+
+## Local Setup
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Start the development servers: `npm start`
+
+## Production Deployment Steps
+
+### Option 1: Single Server Deployment
+1. Build the frontend:
+2. Configure your server to:
+- Serve static files from the `dist` directory
+- Run PocketBase on port 8090 (or your configured port)
+- Set up reverse proxy to route PocketBase requests
+
+3. Configure PocketBase:
+- Set up HTTPS (recommended for production)
+- Configure backups for `pb_data` directory
+
+### Option 2: Separate Frontend and Backend Deployment
+1. Deploy PocketBase to a suitable server or VPS
+2. Configure your frontend to connect to the remote PocketBase instance
+3. Deploy the frontend to a static file hosting service (Netlify, Vercel, etc.)
+
+## Environment Configuration
+- Update `.env` file with production settings
+- Adjust PocketBase URL in the frontend code
+- Set up proper CORS settings in PocketBase
+
+## Backup Strategy
+- Regularly backup the `pb_data` directory
+- Consider using a cron job to automate backups
+
+## Security Considerations
+- Enable HTTPS for both frontend and PocketBase
+- Set strong admin password for PocketBase
+- Configure proper authentication for email sending
+
 ## Important Notes
 
 - Make sure your server's firewall allows incoming connections on the specified ports
 - For production, consider setting up HTTPS for secure connections
 - Update the peer connection configuration in the frontend code if your PeerJS server URL changes
+
+

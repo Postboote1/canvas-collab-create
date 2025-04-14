@@ -579,9 +579,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
   
-    //setIsLoading(true);
-    //localStorage.removeItem('pendingCanvasState'); // Clear any old canvas data
-  
     try {
       if (!isPeerInitialized || !peerRef.current || peerRef.current.destroyed) {
         const peerId = await initializePeer();

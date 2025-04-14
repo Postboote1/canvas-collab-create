@@ -77,17 +77,107 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 2. frames für slides
 3. delete drawings
 4. menu on item/card not working
-5. presentation white background
 6. pocketbase for users and cloud storage
 7. Canvas can be saved to account limit max. 5 / 25Mb (maybe compression?)
 7. optimize for touchscreens
 8. new tool eraser to erase drawings and arrows
 9. Admin Page with admin login for me with statistics
 10. Different roles (viewer, editor)
-11. Improve Arrow creation currently sometimes gets stuck
 12. Item/icon for card is missleading
 13. No rectangle objekt
 14. Notification on canvas only at the bottom not at the top
 15. Export as PDF and Image 
-16. Better image movement 
 17. Only can save canvas when an objekt is added and then an image. A canvas can not be saved when only a image is uploaded
+
+### Pocketbase:
+## Canvases Collection:
+
+Create a collection named "canvases"
+Add fields:
+- name (text, required)
+- data (json, required)
+- size (number, default 0)
+- joinCode (text)
+- isPublic (boolean, default false)
+- user (relation to pb_users_auth, required)
+
+## AppSettings Collection:
+
+Create a collection named "appSettings"
+Add fields:
+- allowRegistration (boolean, default true)
+- maxCanvasesPerUser (number, default 5)
+- maxStoragePerUser (number, default 26214400)
+
+## Modify Users Collection:
+
+Add fields to existing users collection:
+- role (select with options "user" and "admin", default "user")
+- canvasLimit (number, default 5)
+- storageLimit (number, default 26214400)
+- currentStorage (number, default 0)
+
+## Canvases Collection Rules
+# List rule (lets users see their own canvases)
+@request.auth.id != "" && (user = @request.auth.id || @request.auth.role = "admin")
+
+# View rule (same as list rule)
+@request.auth.id != "" && (user = @request.auth.id || @request.auth.role = "admin")
+
+# Create rule (allows users to create canvases owned by themselves) 
+@request.auth.id != ""
+
+# Update rule (allows users to edit their own canvases)
+@request.auth.id != "" && (user = @request.auth.id || @request.auth.role = "admin")
+
+# Delete rule (allows users to delete their own canvases)
+@request.auth.id != "" && (user = @request.auth.id || @request.auth.role = "admin")
+
+## Users Collection Permissions
+# Create rule (to allow registration)
+true
+
+# Profile rule (allow users to see their own profiles)
+@request.auth.id = id || @request.auth.role = "admin"
+
+## Appsettings rules:
+# List rule (allow all authenticated users to view settings)
+@request.auth.id != ""
+
+# View rule (allow all authenticated users to view settings)
+@request.auth.id != ""
+
+# Create rule (only admins can create settings)
+@request.auth.role = "admin"
+
+# Update rule (only admins can update settings) 
+@request.auth.role = "admin"
+
+# Delete rule (only admins can delete settings)
+@request.auth.role = "admin"
+
+
+
+### Email Server Configuration for PocketBase
+If you have a domain from Porkbun, you have a few options:
+
+## Option A: Use Porkbun Email Services
+If Porkbun provides email hosting with your domain, you can use their SMTP server. Look in your Porkbun account for email configuration details.
+
+## Option B: Use a Transactional Email Service (Recommended)
+This is more reliable for application emails:
+
+SendGrid: Free tier (100 emails/day), great deliverability
+Mailgun: Similar to SendGrid
+Resend.com: Developer-friendly, easy to configure
+AWS SES: Cost-effective for higher volumes
+To configure in PocketBase:
+
+Go to http://localhost:8090/_/:
+    Navigate to Settings → Mail Settings
+    Enter the SMTP details:
+    SMTP server (e.g., smtp.sendgrid.net)
+    Port (usually 587 or 465)
+    Username (provided by service)
+    Password (provided by service)
+    Default sender (noreply@yourdomain.com)

@@ -3,6 +3,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { AlertTriangle } from 'lucide-react';
 
 const NavBar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -30,7 +31,8 @@ const NavBar: React.FC = () => {
               My Canvases
             </Link>
             
-            {user.isAdmin && (
+            {/* Add this admin link condition */}
+            {user.role === "admin" && (
               <Link 
                 to="/admin" 
                 className="text-gray-600 hover:text-canvas-blue transition-colors"

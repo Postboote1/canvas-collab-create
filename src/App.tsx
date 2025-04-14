@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerificationPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import CanvasPage from './pages/CanvasPage';
@@ -44,6 +45,7 @@ function App() {
                       <Route index element={<HomePage />} />
                       <Route path="login" element={<LoginPage />} />
                       <Route path="register" element={<RegisterPage />} />
+                      <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
                       <Route path="dashboard" element={<DashboardPage />} />
                       <Route path="create" element={<CreateCanvasPage />} />
                       <Route path="create-temp" element={<CreateTempCanvasPage />} />

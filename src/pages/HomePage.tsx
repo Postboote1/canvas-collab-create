@@ -9,7 +9,7 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate();
   
   return (
-    <Layout>
+    
       <div className="py-12 md:py-20">
         {/* Hero Section */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -163,7 +163,7 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    
   );
 };
 

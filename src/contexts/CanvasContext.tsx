@@ -1,7 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { v4 as uuidv4 } from 'uuid';
+import { pb } from '@/services/pocketbaseService';
 import { useWebSocket } from './WebSocketContext';
 import { toast } from 'sonner';
+
+// Types remain unchanged
 
 export interface CanvasElement {
   id: string;
@@ -53,13 +57,15 @@ interface CanvasContextType {
   generateJoinCode: () => string;
   generateQRCode: (joinCode: string) => string;
   setCurrentCanvas: React.Dispatch<React.SetStateAction<Canvas | null>>;
+  loadUserCanvases: () => Promise<void>;
+  deleteCanvas: (id: string) => Promise<boolean>;
 }
 
 const CanvasContext = createContext<CanvasContextType | undefined>(undefined);
 const CANVAS_STORAGE_KEY = 'global_canvases';
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, refreshUserData } = useAuth();
   const webSocketContext = useWebSocket();
 
   if (!webSocketContext) {
@@ -127,27 +133,34 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const loadUserCanvases = () => {
-    if (!user) return;
+  const loadUserCanvases = useCallback(async () => {
+    if (!pb.client.authStore.isValid) {
+      setUserCanvases([]);
+      return;
+    }
     
     try {
-      // Get all users to find the current user's canvases
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
-      
-      const currentUser = users.find((u: any) => u.id === user.id);
-      if (currentUser && currentUser.canvases) {
-        setUserCanvases(currentUser.canvases);
-      } else {
-        setUserCanvases([]);
-      }
-    } catch (error) {
-      console.error('Failed to load user canvases:', error);
-      toast.error('Failed to load your canvases', {
-        position: 'bottom-center',
+      const records = await pb.client.collection('canvases').getFullList({
+        filter: `user = "${pb.client.authStore.model.id}"`,
+        sort: '-updated',
       });
+      
+      const canvases = records.map(record => ({
+        id: record.id,
+        name: record.name,
+        elements: record.data.elements || [],
+        createdBy: record.user,
+        createdAt: record.created,
+        joinCode: record.joinCode || '',
+        isInfinite: record.data.isInfinite || true,
+      }));
+      
+      setUserCanvases(canvases);
+    } catch (error) {
+      console.error('Failed to load canvases:', error);
+      toast.error('Failed to load your canvases');
     }
-  };
+  }, []);
 
   const isUserAdmin = () => {
     if (!user) return false;
@@ -155,72 +168,70 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return user.isAdmin === true;
   };
 
-  const createCanvas = async (name: string, isInfinite: boolean): Promise<Canvas> => {
-    if (!user) {
-      toast.error('You must be logged in to create a canvas', {
-        position: 'bottom-center',
-      });
-      throw new Error('Not logged in');
+  const createCanvas = useCallback(async (name: string, isInfinite: boolean): Promise<Canvas> => {
+    if (!pb.client.authStore.isValid) {
+      throw new Error('You must be logged in to create a canvas');
     }
     
     // Check if user has reached the limit of 5 canvases (unless they're an admin)
-    if (!isUserAdmin() && userCanvases.length >= 5) {
-      toast.error('You can only create up to 5 canvases. Upgrade to Admin for unlimited canvases.', {
-        position: 'bottom-center',
-      });
-      throw new Error('Canvas limit reached');
+    if (user.role !== 'admin') {
+      const canvasCount = await pb.getCanvasCount(user.id);
+      if (canvasCount >= user.canvasLimit) {
+        toast.error(`You have reached your limit of ${user.canvasLimit} canvases`);
+        throw new Error('Canvas limit reached');
+      }
     }
     
-    const newCanvas: Canvas = {
+    const canvas: Canvas = {
       id: `canvas_${Date.now()}`,
       name,
       elements: [],
-      createdBy: user.id,
+      createdBy: pb.client.authStore.model.id,
       createdAt: new Date().toISOString(),
-      joinCode: generateJoinCode(),
-      isInfinite
+      joinCode: uuidv4().slice(0, 8),
+      isInfinite,
     };
     
+    const canvasSize = JSON.stringify(canvas).length;
+
     try {
-      // Update user's canvases in localStorage
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
+      const record = await pb.client.collection('canvases').create({
+        user: pb.client.authStore.model.id,
+        name: canvas.name,
+        data: canvas,
+        size: canvasSize,
+        joinCode: canvas.joinCode,
+        isPublic: false,
+      });
       
-      const userIndex = users.findIndex((u: any) => u.id === user.id);
-      if (userIndex !== -1) {
-        if (!users[userIndex].canvases) {
-          users[userIndex].canvases = [];
-        }
-        users[userIndex].canvases.push(newCanvas);
-        localStorage.setItem('canvasUsers', JSON.stringify(users));
-        
-        // Also add to global canvases for sharing
-        const allCanvases = getAllCanvases();
-        allCanvases.push(newCanvas);
-        saveAllCanvases(allCanvases, newCanvas);
-        
-        // Update state
-        setUserCanvases([...userCanvases, newCanvas]);
-        setCurrentCanvas(newCanvas);
-        
-        // Track canvas creation for analytics
-        trackCanvasCreation();
-        
-        toast.success('Canvas created successfully!', {
-          position: 'bottom-center',
+      // Update user storage usage
+      if (user.role !== 'admin') {
+        await pb.client.collection('users').update(user.id, {
+          currentStorage: (user.currentStorage || 0) + canvasSize
         });
-        return newCanvas;
-      } else {
-        throw new Error('User not found');
+        refreshUserData();
       }
+      
+      const newCanvas = {
+        id: record.id,
+        name: canvas.name,
+        elements: canvas.elements,
+        createdBy: canvas.createdBy,
+        createdAt: canvas.createdAt,
+        joinCode: canvas.joinCode,
+        isInfinite: canvas.isInfinite,
+      };
+      
+      setCurrentCanvas(newCanvas);
+      await loadUserCanvases();
+      
+      return newCanvas;
     } catch (error) {
       console.error('Failed to create canvas:', error);
-      toast.error('Failed to create canvas', {
-        position: 'bottom-center',
-      });
+      toast.error('Failed to create canvas');
       throw error;
     }
-  };
+  }, [user, loadUserCanvases, refreshUserData]);
 
   // Add a new method to create temporary canvases without login
   const createTempCanvas = async (name: string, isInfinite: boolean): Promise<Canvas> => {
@@ -256,100 +267,109 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Add a method to save the current temporary canvas to a user account
-  const saveCurrentCanvasToAccount = async (): Promise<boolean> => {
-    if (!user) {
-      toast.error('You must be logged in to save a canvas', {
-        position: 'bottom-center',
-      });
+  // Save a temporary canvas to the user's account
+  const saveCurrentCanvasToAccount = useCallback(async () => {
+    if (!currentCanvas || !pb.client.authStore.isValid) {
+      toast.error('You must be logged in to save this canvas');
       return false;
     }
     
-    if (!currentCanvas) {
-      toast.error('No canvas to save', {
-        position: 'bottom-center',
-      });
-      return false;
-    }
-    
-    // Check if user has reached the limit of 5 canvases (unless they're an admin)
-    if (!isUserAdmin() && userCanvases.length >= 5) {
-      toast.error('You can only have up to 5 canvases. Please delete one first or upgrade to Admin.', {
-        position: 'bottom-center',
-      });
-      return false;
-    }
-    
-    try {
-      // Get users from localStorage
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
-      
-      const userIndex = users.findIndex((u: any) => u.id === user.id);
-      if (userIndex !== -1) {
-        if (!users[userIndex].canvases) {
-          users[userIndex].canvases = [];
-        }
-        
-        // Create a new canvas object with the current user as the owner
-        const savedCanvas: Canvas = {
-          ...currentCanvas,
-          id: `canvas_${Date.now()}`,
-          createdBy: user.id,
-          createdAt: new Date().toISOString(),
-        };
-        
-        users[userIndex].canvases.push(savedCanvas);
-        localStorage.setItem('canvasUsers', JSON.stringify(users));
-        
-        // Update global canvases - replace the temp canvas with the saved one
-        const allCanvases = getAllCanvases();
-        const tempCanvasIndex = allCanvases.findIndex(c => c.id === currentCanvas.id);
-        if (tempCanvasIndex !== -1) {
-          allCanvases[tempCanvasIndex] = savedCanvas;
-        } else {
-          allCanvases.push(savedCanvas);
-        }
-        saveAllCanvases(allCanvases);
-        
-        // Update state
-        setUserCanvases([...userCanvases, savedCanvas]);
-        setCurrentCanvas(savedCanvas);
-        
-        toast.success('Canvas saved to your account!', {
-          position: 'bottom-center',
-        });
-        return true;
-      } else {
-        toast.error('User not found', {
-          position: 'bottom-center',
-        });
+    // Check if user can create more canvases
+    if (user.role !== 'admin') {
+      const canvasCount = await pb.getCanvasCount(user.id);
+      if (canvasCount >= user.canvasLimit) {
+        toast.error(`You have reached your limit of ${user.canvasLimit} canvases`);
         return false;
       }
+    }
+    
+    try {
+      const canvasData = { ...currentCanvas };
+      const canvasSize = JSON.stringify(canvasData).length;
+      
+      // For non-admin users, check storage limit
+      if (user.role !== 'admin' && canvasSize > user.storageLimit - user.currentStorage) {
+        toast.error('You have reached your storage limit');
+        return false;
+      }
+      
+      // Create a new canvas in PocketBase
+      const record = await pb.client.collection('canvases').create({
+        user: pb.client.authStore.model.id,
+        name: currentCanvas.name,
+        data: canvasData,
+        size: canvasSize,
+        joinCode: currentCanvas.joinCode,
+        isPublic: false,
+      });
+      
+      // Update user's storage for non-admin users
+      if (user.role !== 'admin') {
+        await pb.client.collection('users').update(user.id, {
+          currentStorage: (user.currentStorage || 0) + canvasSize
+        });
+        refreshUserData();
+      }
+      
+      // Update local state
+      const newCanvas = {
+        id: record.id,
+        name: canvasData.name,
+        elements: canvasData.elements,
+        createdBy: pb.client.authStore.model.id,
+        createdAt: canvasData.createdAt,
+        joinCode: canvasData.joinCode,
+        isInfinite: canvasData.isInfinite,
+      };
+      
+      setCurrentCanvas(newCanvas);
+      await loadUserCanvases();
+      
+      toast.success('Canvas saved to your account');
+      return true;
     } catch (error) {
       console.error('Failed to save canvas to account:', error);
-      toast.error('Failed to save canvas to account', {
-        position: 'bottom-center',
-      });
+      toast.error('Failed to save canvas to your account');
       return false;
     }
-  };
+  }, [currentCanvas, user, loadUserCanvases, refreshUserData]);
 
-  const loadCanvas = async (id: string): Promise<boolean> => {
+  // Load canvas by ID
+  const loadCanvas = useCallback(async (canvasId: string) => {
+    // Clear any pending canvas state before loading a specific canvas
+    localStorage.removeItem('pendingCanvasState');
     try {
-      const canvas = userCanvases.find(canvas => canvas.id === id);
-      if (canvas) {
-        setCurrentCanvas(canvas);
-        return true;
+      const record = await pb.client.collection('canvases').getOne(canvasId);
+      
+      // Check if user has permission
+      const isOwner = record.user === pb.client.authStore.model?.id;
+      const isAdmin = user?.role === 'admin';
+      const isPublic = record.isPublic;
+      
+      if (!isOwner && !isAdmin && !isPublic) {
+        toast.error('You do not have permission to view this canvas');
+        return null;
       }
-      return false;
+      
+      const canvasData = record.data;
+      const canvas = {
+        id: record.id,
+        name: canvasData.name || record.name,
+        elements: canvasData.elements || [],
+        createdBy: canvasData.createdBy || record.user,
+        createdAt: canvasData.createdAt || record.created,
+        joinCode: canvasData.joinCode || record.joinCode || '',
+        isInfinite: canvasData.isInfinite ?? true,
+      };
+      
+      setCurrentCanvas(canvas);
+      return canvas;
     } catch (error) {
       console.error('Failed to load canvas:', error);
-      toast.error('Failed to load canvas', {
-        position: 'bottom-center',
-      });
-      return false;
+      toast.error('Failed to load canvas');
+      return null;
     }
-  };
+  }, [user]);
 
   const loadCanvasByCode = async (code: string): Promise<boolean> => {
     try {
@@ -408,69 +428,87 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const saveCanvas = async (): Promise<boolean> => {
-    if (!currentCanvas) {
-      toast.error('No canvas to save', {
-        position: 'bottom-center',
-      });
-      return false;
-    }
-    
-    // If anonymous user, just return true without saving
-    if (!user || currentCanvas.createdBy === 'anonymous') {
-      toast.info('Sign in to save this canvas to your account', {
-        position: 'bottom-center',
-      });
-      return true;
-    }
+  const saveCanvas = useCallback(async () => {
+    if (!currentCanvas || !pb.client.authStore.isValid) return false;
     
     try {
-      // Update the canvas in localStorage
-      const usersStr = localStorage.getItem('canvasUsers') || '[]';
-      const users = JSON.parse(usersStr);
+      const canvasData = { ...currentCanvas };
+      const canvasSize = JSON.stringify(canvasData).length;
       
-      const userIndex = users.findIndex((u: any) => u.id === user.id);
-      if (userIndex !== -1) {
-        const canvasIndex = users[userIndex].canvases.findIndex(
-          (c: Canvas) => c.id === currentCanvas.id
-        );
+      // For non-admin users, check storage limit
+      if (user.role !== 'admin') {
+        // Get current canvas to calculate size difference
+        const existingCanvas = await pb.client.collection('canvases').getOne(currentCanvas.id);
+        const sizeDifference = canvasSize - existingCanvas.size;
         
-        if (canvasIndex !== -1) {
-          users[userIndex].canvases[canvasIndex] = currentCanvas;
-          localStorage.setItem('canvasUsers', JSON.stringify(users));
-          
-          // Also update in global canvases
-          const allCanvases = getAllCanvases();
-          const globalCanvasIndex = allCanvases.findIndex(c => c.id === currentCanvas.id);
-          if (globalCanvasIndex !== -1) {
-            allCanvases[globalCanvasIndex] = currentCanvas;
-          } else {
-            allCanvases.push(currentCanvas);
-          }
-          saveAllCanvases(allCanvases);
-          
-          // Update state
-          setUserCanvases(users[userIndex].canvases);
-          
-          toast.success('Canvas saved successfully!', {
-            position: 'bottom-center',
-          });
-          return true;
+        if (user.currentStorage + sizeDifference > user.storageLimit) {
+          toast.error('You have reached your storage limit');
+          return false;
         }
       }
       
-      toast.error('Failed to save canvas: Canvas not found', {
-        position: 'bottom-center',
+      // Update the canvas in PocketBase
+      await pb.client.collection('canvases').update(currentCanvas.id, {
+        name: currentCanvas.name,
+        data: canvasData,
+        size: canvasSize,
+        updated: new Date().toISOString()
       });
-      return false;
+      
+      // Update user's storage usage for non-admin users
+      if (user.role !== 'admin') {
+        const existingCanvas = await pb.client.collection('canvases').getOne(currentCanvas.id);
+        const sizeDifference = canvasSize - existingCanvas.size;
+        
+        await pb.client.collection('users').update(user.id, {
+          currentStorage: (user.currentStorage || 0) + sizeDifference
+        });
+        refreshUserData();
+      }
+      
+      toast.success('Canvas saved successfully');
+      return true;
     } catch (error) {
       console.error('Failed to save canvas:', error);
-      toast.error('Failed to save canvas', {
-        position: 'bottom-center',
-      });
+      toast.error('Failed to save canvas');
       return false;
     }
-  };
+  }, [currentCanvas, user, refreshUserData]);
+
+  // Delete a canvas
+  const deleteCanvas = useCallback(async (canvasId: string) => {
+    if (!pb.client.authStore.isValid) return false;
+    
+    try {
+      // Get canvas size before deleting
+      const canvas = await pb.client.collection('canvases').getOne(canvasId);
+      const canvasSize = canvas.size || 0;
+      
+      // Delete from PocketBase
+      await pb.client.collection('canvases').delete(canvasId);
+      
+      // Update user's storage for non-admin users
+      if (user.role !== 'admin') {
+        await pb.client.collection('users').update(user.id, {
+          currentStorage: Math.max(0, (user.currentStorage || 0) - canvasSize)
+        });
+        refreshUserData();
+      }
+      
+      // Update local state
+      if (currentCanvas?.id === canvasId) {
+        setCurrentCanvas(null);
+      }
+      await loadUserCanvases();
+      
+      toast.success('Canvas deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to delete canvas:', error);
+      toast.error('Failed to delete canvas');
+      return false;
+    }
+  }, [currentCanvas, loadUserCanvases, user, refreshUserData]);
 
   // Canvas operations with useCallback for stability
   const addElement = useCallback((element: Omit<CanvasElement, 'id'>) => {
@@ -486,7 +524,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     // Return the new element with its ID
     return newElement;
-  }, [sendMessage]);
+  }, []);
 
   const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
     setCurrentCanvas(prev => {
@@ -766,7 +804,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       importCanvasData,
       generateJoinCode,
       generateQRCode,
-      setCurrentCanvas
+      setCurrentCanvas,
+      loadUserCanvases,
+      deleteCanvas,
     }}>
       {children}
     </CanvasContext.Provider>
