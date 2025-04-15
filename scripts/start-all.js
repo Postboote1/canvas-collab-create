@@ -2,6 +2,7 @@ import { exec, spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { startMetricsCollector } from '../server/metrics-collector.js';
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -11,6 +12,12 @@ const __dirname = path.dirname(__filename);
 const pbDataPath = path.join(__dirname, '../server/pb_data');
 const isFirstRun = !fs.existsSync(pbDataPath);
 
+// Ensure server directories exist
+const migrationsPath = path.join(__dirname, '../server/pb_migrations');
+if (!fs.existsSync(migrationsPath)) {
+  fs.mkdirSync(migrationsPath, { recursive: true });
+}
+
 const pbPath = path.join(__dirname, '../server/pocketbase');
 const command = `${pbPath} serve --http="0.0.0.0:8090"`;
 
@@ -19,6 +26,12 @@ const pbProcess = exec(command);
 
 pbProcess.stdout.on('data', (data) => {
   console.log(`PocketBase: ${data}`);
+  
+  // If we see that PocketBase has started, launch the metrics collector
+  if (data.includes('Server started at')) {
+    console.log('PocketBase server detected as running, starting metrics collector...');
+    startMetricsCollector();
+  }
 });
 
 pbProcess.stderr.on('data', (data) => {

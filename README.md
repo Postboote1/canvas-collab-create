@@ -117,6 +117,21 @@ Add fields to existing users collection:
 - storageLimit (number, default 26214400)
 - currentStorage (number, default 0)
 
+## ServerMetrics:
+Create a new collection named serverMetrics
+Add the following fields:
+    - timestamp (DateTime)
+    - cpu (Number)
+    - memory (Number)
+    - storage (Number)
+    - activeUsers (Number)
+    - apiRequests (Number)
+    "listRule": "@request.auth.role = 'admin'",
+    "viewRule": "@request.auth.role = 'admin'",
+    "createRule": "@request.auth.role = 'admin'",
+    "updateRule": "@request.auth.role = 'admin'",
+    "deleteRule": "@request.auth.role = 'admin'"
+
 ## Canvases Collection Rules
 # List rule (lets users see their own canvases)
 @request.auth.id != "" && (user = @request.auth.id || @request.auth.role = "admin")

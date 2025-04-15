@@ -1,5 +1,5 @@
 import PocketBase from 'pocketbase';
-
+import os from 'os'; // Node.js built-in
 // Create a singleton instance
 class PocketBaseService {
   private static instance: PocketBaseService;
@@ -114,6 +114,73 @@ class PocketBaseService {
       }
     } catch (error) {
       console.error('Failed to initialize app settings:', error);
+    }
+  }
+
+  public async getServerMetrics() {
+    try {
+      // Browser environment - fetch the most recent metrics entry from the collection
+      try {
+        const result = await this.client.collection('serverMetrics').getList(1, 1, {
+          sort: '-created', // Get the most recent entry by creation time, not timestamp
+        });
+        
+        if (result.items.length > 0) {
+          const latestMetrics = result.items[0];
+          console.log("Retrieved latest metrics:", latestMetrics);
+          return {
+            cpu: typeof latestMetrics.cpu === 'number' ? latestMetrics.cpu : 0,
+            memory: typeof latestMetrics.memory === 'number' ? latestMetrics.memory : 0,
+            totalMemory: 8 * 1024 * 1024 * 1024, // Estimate 8GB as default if not available
+            storage: typeof latestMetrics.storage === 'number' ? latestMetrics.storage : 0,
+            activeUsers: typeof latestMetrics.activeUsers === 'number' ? latestMetrics.activeUsers : 0,
+            apiRequests: typeof latestMetrics.apiRequests === 'number' ? latestMetrics.apiRequests : 0,
+            timestamp: latestMetrics.timestamp
+          };
+        }
+      } catch (error) {
+        console.error('Failed to fetch server metrics from collection:', error);
+      }
+      
+      // Fallback to default metrics if collection fetch failed
+      return {
+        cpu: 0,
+        memory: 0,
+        totalMemory: 8 * 1024 * 1024 * 1024, // Default 8GB
+        storage: 0,
+        activeUsers: 0,
+        apiRequests: 0
+      };
+    } catch (error) {
+      console.error('Error collecting server metrics:', error);
+      return {
+        cpu: 0,
+        memory: 0,
+        totalMemory: 8 * 1024 * 1024 * 1024,
+        storage: 0,
+        activeUsers: 0,
+        apiRequests: 0
+      };
+    }
+  }
+  // Method to create a serverMetrics record
+  public async recordServerMetrics() {
+    try {
+      const metrics = await this.getServerMetrics();
+      
+      await this.client.collection('serverMetrics').create({
+        timestamp: new Date().toISOString(),
+        cpu: metrics.cpu,
+        memory: metrics.memory,
+        storage: metrics.storage,
+        activeUsers: metrics.activeUsers,
+        apiRequests: metrics.apiRequests,
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to record server metrics:', error);
+      return false;
     }
   }
 }
