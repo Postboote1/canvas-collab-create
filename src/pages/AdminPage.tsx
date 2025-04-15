@@ -250,7 +250,7 @@ const AdminPage: React.FC = () => {
                                 size="sm"
                                 onClick={() => {
                                   const canvasLimit = prompt('Enter new canvas limit:', user.canvasLimit || '5');
-                                  const storageLimit = prompt('Enter new storage limit (in MB):', (user.storageLimit || 26214400) / 1024 / 1024);
+                                  const storageLimit = prompt('Enter new storage limit (in MB):', ((user.storageLimit || 26214400) / 1024 / 1024).toString());
                                   
                                   if (canvasLimit && storageLimit) {
                                     updateUserLimits(

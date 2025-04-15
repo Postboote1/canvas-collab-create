@@ -165,7 +165,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const isUserAdmin = () => {
     if (!user) return false;
     // Fix the property access by checking isAdmin property directly
-    return user.isAdmin === true;
+    return user.role === "admin";
   };
 
   const createCanvas = useCallback(async (name: string, isInfinite: boolean): Promise<Canvas> => {
@@ -363,11 +363,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
       
       setCurrentCanvas(canvas);
-      return canvas;
+      return true; // Return true to indicate success
     } catch (error) {
       console.error('Failed to load canvas:', error);
       toast.error('Failed to load canvas');
-      return null;
+      return false;
     }
   }, [user]);
 
