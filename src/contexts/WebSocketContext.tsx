@@ -69,11 +69,11 @@ const initializePeerFunc = (
       
       // Create a more robust configuration with more STUN/TURN servers
       const newPeer = new Peer(undefined, {
-        host: window.location.hostname,
+        host: "peerjs.canvascollab.de",
         port: 9000,
         path: '/',
         debug: 1, // Lower debug level to reduce console noise
-        secure: false,
+        secure: true,
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
