@@ -242,11 +242,11 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
   // Canvas audit logging
   useEffect(() => {
     if (currentCanvas) {
-      console.log('AUDIT: Canvas updated:', {
-        id: currentCanvas.id,
-        elements: currentCanvas.elements.length,
-        elementIds: currentCanvas.elements.map(el => el.id)
-      });
+      //console.log('AUDIT: Canvas updated:', {
+      //  id: currentCanvas.id,
+      //  elements: currentCanvas.elements.length,
+      //  elementIds: currentCanvas.elements.map(el => el.id)
+      //});
     }
   }, [currentCanvas]);
 

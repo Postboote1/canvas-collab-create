@@ -4,7 +4,7 @@ import { ExpressPeerServer } from 'peer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { networkInterfaces } from 'os'; // Import os module at the top
+import { networkInterfaces } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,21 +20,27 @@ app.use(cors({
   credentials: true
 }));
 
-// Create PeerJS server - IMPORTANT: path is '/' not '/peerjs'
+// Create PeerJS server with minimal configuration
 const peerServer = ExpressPeerServer(server, {
   debug: true,
-  path: '/',  // Changed from '/peerjs' to '/'
-  allow_discovery: true,
-  proxied: true
+  path: '/',
+  proxied: false // Changed from true to false
 });
 
-// Mount at the root path to avoid double path issues
-app.use('/', peerServer);  // Changed from '/peerjs' to '/'
+// Mount PeerJS server - FIX: mount it at a specific route instead of root
+app.use('/peerjs', peerServer);  // Changed from '/' to '/peerjs'
 
 // Serve static files for production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'dist')));
-  app.get('*', (req, res) => {
+  
+  // FIX: change the catch-all route to avoid conflicts
+  app.get('/*', (req, res) => {
+    // Skip processing PeerJS requests
+    if (req.path.startsWith('/peerjs')) {
+      return;
+    }
+    
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
   });
 }
@@ -42,7 +48,7 @@ if (process.env.NODE_ENV === 'production') {
 // Start the server on all network interfaces
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`PeerJS server available at http://<your-ip>:${PORT}`);
+  console.log(`PeerJS server available at http://<your-ip>:${PORT}/peerjs`);
   
   // Display local IP addresses for easy connection
   const nets = networkInterfaces();

@@ -291,6 +291,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [messageHandlers]);
 
+  
+
   // Configure new connection
   const setupConnection = useCallback((conn: DataConnection) => {
     console.log('Setting up connection with peer:', conn.peer);
@@ -1130,78 +1132,73 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // FOR ADD OPERATIONS: Use the global element registry
       if (payload.operation === 'add' && payload.element) {
         try {
-          // Ensure the element has a consistent ID
+          // Get element ID
           const elementId = payload.element.id || 
             `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
           
-          const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
-
-          // FIRST DEDUPLICATION CHECK: Check our in-memory set for this session
-          if (addedElementIds.current.has(elementId)) {
-            console.log(`DEDUPLICATION: Element ${elementId} already processed in this session`);
+          // Create a device-specific key for deduplication
+          const deviceId = payload.sender || payload.deviceId || 'unknown';
+          const deviceElementKey = `${deviceId}:${elementId}`;
+          
+          console.log(`ADD OPERATION: Processing element ${elementId} from device ${deviceId}`);
+          console.log(`Local peer ID: ${peerId}, message details:`, {
+            crossDeviceFlags: {
+              _crossDeviceOp: payload._crossDeviceOp,
+              _forceBroadcast: payload._forceBroadcast,
+              elementCrossDevice: payload.element._crossDeviceElement
+            },
+            sender: payload.sender,
+            device: deviceId,
+            local: peerId
+          });
+          
+          // Cross-device detection - CRITICAL FIX - Don't use simple comparison
+          const isDifferentDevice = payload.sender !== peerId && deviceId !== peerId;
+          const hasCrossDeviceFlags = payload._crossDeviceOp || payload._forceBroadcast || 
+                                    payload.element._crossDeviceElement;
+                                    
+          const isCrossDeviceOperation = isDifferentDevice || hasCrossDeviceFlags;
+          
+          // Skip ONLY if we've already processed this exact element from this exact device
+          // and it's NOT a cross-device operation with force flags
+          if (!isCrossDeviceOperation && addedElementIds.current.has(deviceElementKey)) {
+            console.log(`Local duplicate from same device, skipping: ${deviceElementKey}`);
             return;
           }
           
-          // SECOND CHECK: Check the global registry in localStorage
-          if (payload.sender === peerId || payload.element._source === peerId) {
-            console.log(`STRICT DEDUPLICATION: Element ${elementId} created by this device, skipping completely`);
-            // Still add to tracking to prevent future duplicates
-            addedElementIds.current.add(elementId);
-            const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
-            if (!registry.includes(elementId)) {
-              registry.push(elementId);
-              localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
-            }
-            return; // Critical: Exit early
+          // For cross-device operations, always log but process
+          if (isCrossDeviceOperation) {
+            console.log(`CROSS-DEVICE OPERATION: Force processing element ${elementId} from ${deviceId}`);
           }
           
-          // THIRD CHECK: Verify against current canvas state
-          const elementExists = currentCanvasData.elements.some(el => el.id === elementId);
-          if (elementExists) {
-            console.log(`STRICT DEDUPLICATION: Element ${elementId} already exists in canvas, skipping completely`);
-            // Still add to tracking to prevent future duplicates
-            addedElementIds.current.add(elementId);
-            const registry = JSON.parse(localStorage.getItem('globalElementRegistry') || '[]');
-            if (!registry.includes(elementId)) {
-              registry.push(elementId);
-              localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
-            }
-            return; // Critical: Exit early
-          }
+          // Add the element to canvas 
+          console.log(`Adding element ${elementId} to canvas from device: ${deviceId}`);
           
-          // Add to tracking BEFORE adding the element
-          addedElementIds.current.add(elementId);
-          if (!registry.includes(elementId)) {
-            registry.push(elementId);
-            localStorage.setItem('globalElementRegistry', JSON.stringify(registry));
-          }
-          console.log(`Added element ${elementId} to tracking registries`);
+          // CRITICAL: Make a deep copy of the canvas before modifying
+          const updatedCanvas = JSON.parse(JSON.stringify(currentCanvasData));
           
-          // Add the element to the canvas
-          const updatedCanvas = {
-            ...currentCanvasData,
-            elements: [
-              // Filter out any existing elements with the same ID before adding the new one
-              ...currentCanvasData.elements.filter(el => el.id !== elementId),
-              {
-                ...payload.element,
-                id: elementId,
-                x: typeof payload.element.x === 'number' ? payload.element.x : 0,
-                y: typeof payload.element.y === 'number' ? payload.element.y : 0
-              }
-            ]
-          };
+          // Clean the incoming element of any processing flags before adding
+          const cleanElement = { ...payload.element };
           
-          // Update the canvas state
-          setCurrentCanvas(updatedCanvas);
+          // Add the cleaned element to the canvas
+          updatedCanvas.elements.push(cleanElement);
+          
+          // Save to localStorage and update state
           localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
+          setCurrentCanvas(updatedCanvas);
           
-          // Force UI update with custom event
+          // Force refresh UI with a custom event
           window.dispatchEvent(new CustomEvent('force-canvas-refresh', {
-            detail: { operation: 'add', elementId }
+            detail: { operation: 'add', elementId: elementId, timestamp: Date.now() }
           }));
           
-          console.log(`Successfully added element ${elementId} to canvas`);
+          // Mark as processed using the device-specific key
+          addedElementIds.current.add(deviceElementKey);
+          
+          // Notify user
+          toast.success(`New element added from ${deviceId === peerId ? 'you' : 'collaborator'}`, 
+            { duration: 2000 });
+            
         } catch (error) {
           console.error('Error processing add operation:', error);
         }
@@ -1302,12 +1299,41 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // But only if we didn't receive it from another peer (avoid loops)
       connections.forEach(conn => {
         if (conn && conn.open && conn.peer !== payload.sender) {
-          conn.send({
+          // Get stable device ID
+          const stableDeviceId = peerId || localStorage.getItem('stableDeviceId') || 
+            (() => {
+              const newId = 'device-' + Date.now() + '-' + Math.random().toString(36).substring(2, 10);
+              localStorage.setItem('stableDeviceId', newId);
+              return newId;
+            })();
+          
+          // Create a clean forwarded message with reliable device ID
+          const forwardMessage = {
             type: 'canvasOperation',
-            payload,
-            sender: peerId,
+            payload: {
+              ...payload,
+              _relayed: true,
+              _originalSender: payload.sender || stableDeviceId,
+              _crossDeviceOp: true,
+              _forceSync: true,
+              operation: payload.operation,
+              // Handle element properly for different operation types
+              ...(payload.operation === 'add' && payload.element ? {
+                element: {
+                  ...payload.element,
+                  _deviceOrigin: stableDeviceId,
+                  _crossDeviceElement: true,
+                  _relayTimestamp: Date.now()
+                }
+              } : {})
+            },
+            sender: stableDeviceId, // Always use stable ID for sender
             timestamp: Date.now()
-          });
+          };
+          
+          // Send with explicit logging
+          console.log(`Relaying operation to peer ${conn.peer}:`, forwardMessage);
+          conn.send(forwardMessage);
         }
       });
     });

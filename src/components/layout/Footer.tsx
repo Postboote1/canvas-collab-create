@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -32,6 +31,21 @@ const Footer: React.FC = () => {
                   My Canvases
                 </Link>
               </li>
+              <li>
+                <Link to="/impressum" className="text-gray-600 hover:text-canvas-blue transition-colors">
+                  Impressum
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" className="text-gray-600 hover:text-canvas-blue transition-colors">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link to="/agb" className="text-gray-600 hover:text-canvas-blue transition-colors">
+                  AGBs
+                </Link>
+              </li>
             </ul>
           </div>
           
@@ -50,7 +64,7 @@ const Footer: React.FC = () => {
         </div>
         
         <div className="mt-8 pt-4 border-t border-gray-200 text-center text-gray-600">
-          <p>&copy; {new Date().getFullYear()} CanvasCollab. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Stoessel Matthias. All rights reserved.</p>
         </div>
       </div>
     </footer>

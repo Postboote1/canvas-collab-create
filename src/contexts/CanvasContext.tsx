@@ -781,7 +781,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [registerHandler, currentCanvas, sendMessage]);
 
   useEffect(() => {
-    console.log('Current canvas updated:', currentCanvas);
+    //console.log('Current canvas updated:', currentCanvas);
   }, [currentCanvas]);
 
   return (

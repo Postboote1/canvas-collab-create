@@ -4,7 +4,7 @@ import CanvasJoin from '@/components/canvas/CanvasJoin';
 
 const JoinPage: React.FC = () => {
   return (
-    <Layout>
+   
       <div className="max-w-4xl mx-auto my-12 px-4">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold">Join a Canvas</h1>
@@ -14,7 +14,7 @@ const JoinPage: React.FC = () => {
         </div>
         <CanvasJoin />
       </div>
-    </Layout>
+    
   );
 };
 

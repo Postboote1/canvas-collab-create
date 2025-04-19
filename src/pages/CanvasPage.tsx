@@ -89,7 +89,7 @@ const CanvasPage: React.FC = () => {
         
         if (pendingCanvasState) {
           const canvasData = JSON.parse(pendingCanvasState);
-          console.log('Loading pending canvas state:', canvasData);
+          //console.log('Loading pending canvas state:', canvasData);
           
           // Modified logic: Only load if it's clearly the same canvas with updates
           // or if we have no canvas yet
@@ -99,7 +99,7 @@ const CanvasPage: React.FC = () => {
              canvasData.elements && canvasData.elements.length >= (currentCanvas.elements?.length || 0));
           
           if (shouldLoadPending) {
-            console.log('Setting canvas from pending state, elements count:', canvasData.elements.length);
+            //console.log('Setting canvas from pending state, elements count:', canvasData.elements.length);
             setCurrentCanvas(canvasData);
             setLastLoadedCanvasId(canvasData.id);
             

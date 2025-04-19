@@ -19,7 +19,9 @@ import { Toaster } from '@/components/ui/sonner';
 import PresentationMode from './components/canvas/PresentationMode';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ContextBridge } from './contexts/ContextBridge'; // Use named import instead of default import
-
+import ImpressumPage from './pages/ImpressumPage';
+import TermsPage from './pages/TermsPage';
+import AGBPage from './pages/AGBPage';
 
 // Add window augmentation for canvas export methods
 declare global {
@@ -55,6 +57,9 @@ function App() {
                     </Route>
                     <Route path="/canvas" element={<CanvasPage />} />
                     <Route path="/presentation" element={<PresentationMode />} />
+                    <Route path="/impressum" element={<ImpressumPage />} />
+                    <Route path="/terms" element={<TermsPage />} />
+                    <Route path="/agb" element={<AGBPage />} />
                   </Routes>
                   <Toaster position="bottom-right" />
                 </AnalyticsProvider>

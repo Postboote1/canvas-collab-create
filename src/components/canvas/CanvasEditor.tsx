@@ -16,7 +16,7 @@ interface CanvasEditorProps {
 const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas, setCurrentCanvas } = useCanvas();
-  const { isConnected, sendMessage, registerHandler } = useWebSocket();
+  const { isConnected, sendMessage, registerHandler, peerId } = useWebSocket();
   const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
@@ -462,7 +462,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
             type: 'canvasOperation',
             payload: {
               operation: 'update',
-              element: { id, ...validatedUpdates }
+              element: { 
+                id, 
+                ...validatedUpdates, 
+                _bypass: true,
+                _originDevice: window.location.hostname
+              },
+              _bypassDedupe: true,
+              _timestamp: Date.now()
             }
           });
         });
@@ -473,7 +480,14 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           type: 'canvasOperation',
           payload: {
             operation: 'update',
-            element: { id, ...validatedUpdates }
+            element: { 
+              id, 
+              ...validatedUpdates,
+              _bypass: true,
+              _originDevice: window.location.hostname
+            },
+            _bypassDedupe: true,
+            _timestamp: Date.now()
           }
         });
       }
@@ -491,7 +505,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         type: 'canvasOperation',
         payload: {
           operation: 'delete',
-          elementId: id
+          elementId: id,
+          _bypass: true,
+          _originDevice: window.location.hostname,
+          _bypassDedupe: true,
+          _timestamp: Date.now()
         }
       });
     }
@@ -504,6 +522,16 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   // Create a handleAddElement function that handles both local add and peer sync
   const handleAddElement = (element: Omit<CanvasElementType, 'id'>) => {
+    // Create a stable device identifier that persists between sessions
+    const getStableDeviceId = () => {
+      const stored = localStorage.getItem('stableDeviceId');
+      if (stored) return stored;
+      
+      const newId = `device-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+      localStorage.setItem('stableDeviceId', newId);
+      return newId;
+    };
+  
     // Ensure coordinates are valid numbers
     const validatedElement = {
       ...element,
@@ -511,24 +539,42 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       y: typeof element.y === 'number' ? element.y : 0
     };
     
-    // Add element locally with a guaranteed unique ID
-    const newElementWithId = addElement(validatedElement);
+    // Generate a unique ID with timestamp for better uniqueness
+    const uniqueId = `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const stableDeviceId = getStableDeviceId();
     
-    // Send to connected peers after a small delay to ensure local processing completes
-    setTimeout(() => {
-      if (isConnected && sendMessage) {
-        console.log('Broadcasting new element to peers:', newElementWithId);
-        sendMessage({
-          type: 'canvasOperation',
-          payload: {
-            operation: 'add',
-            element: newElementWithId
-          }
-        });
-      }
-    }, 50);
+    // Create the element with device identifiers
+    const newElement: CanvasElementType = {
+      ...validatedElement,
+      id: uniqueId,
+      _source: peerId || stableDeviceId
+    };
     
-    return newElementWithId;
+    // Add locally first
+    addElement(newElement);
+    
+    // Then broadcast with special flags to ensure cross-device handling
+    if (isConnected && sendMessage) {
+      console.log('Broadcasting new element to peers with flags');
+      
+      sendMessage({
+        type: 'canvasOperation',
+        payload: {
+          operation: 'add',
+          element: {
+            ...newElement,
+            _deviceId: stableDeviceId,
+            _crossDeviceElement: true,
+            _timestamp: Date.now()
+          },
+          _crossDeviceOp: true,
+          _forceBroadcast: true,
+          deviceId: stableDeviceId
+        }
+      });
+    }
+    
+    return newElement;
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
