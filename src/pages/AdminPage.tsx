@@ -82,6 +82,7 @@ const AdminPage: React.FC = () => {
       const userRecords = await pb.client.collection('users').getFullList({
         sort: '-created',
         expand: 'canvases',
+        fields: 'id,username,email,verified,role,canvasLimit,storageLimit,currentStorage'
       });
       setUsers(userRecords);
       
