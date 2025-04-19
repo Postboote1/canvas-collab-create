@@ -78,19 +78,48 @@ const AdminPage: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch users
+      // Fetch users with explicit fields
       const userRecords = await pb.client.collection('users').getFullList({
         sort: '-created',
-        expand: 'canvases',
         fields: 'id,username,email,verified,role,canvasLimit,storageLimit,currentStorage'
       });
-      setUsers(userRecords);
       
-      // Fetch total storage and canvases
+      // Separately fetch canvases with user relations
       const canvasRecords = await pb.client.collection('canvases').getFullList({
-        sort: '-created',
+        expand: 'user',
       });
       
+      // Map canvases to users
+      const userCanvasMap = new Map();
+      const userStorageMap = new Map();
+      
+      canvasRecords.forEach(canvas => {
+        if (canvas.user) {
+          // Count canvases per user
+          if (!userCanvasMap.has(canvas.user)) {
+            userCanvasMap.set(canvas.user, 0);
+          }
+          userCanvasMap.set(canvas.user, userCanvasMap.get(canvas.user) + 1);
+          
+          // Sum storage per user
+          if (!userStorageMap.has(canvas.user)) {
+            userStorageMap.set(canvas.user, 0);
+          }
+          userStorageMap.set(
+            canvas.user, 
+            userStorageMap.get(canvas.user) + (canvas.size || 0)
+          );
+        }
+      });
+      
+      // Attach canvas counts and storage to users
+      const enhancedUsers = userRecords.map(user => ({
+        ...user,
+        canvasCount: userCanvasMap.get(user.id) || 0,
+        actualStorage: userStorageMap.get(user.id) || 0
+      }));
+      
+      setUsers(enhancedUsers);
       setTotalCanvases(canvasRecords.length);
       setTotalStorage(canvasRecords.reduce((acc, canvas) => acc + (canvas.size || 0), 0));
       
@@ -371,10 +400,10 @@ const AdminPage: React.FC = () => {
                           <TableCell>{user.role || 'user'}</TableCell>
                           <TableCell>{user.verified ? 'Yes' : 'No'}</TableCell>
                           <TableCell>
-                            {user.expand?.canvases?.length || 0} / {user.canvasLimit || 5}
+                            {user.canvasCount || 0} / {user.canvasLimit || 5}
                           </TableCell>
                           <TableCell>
-                            {formatBytes(user.currentStorage || 0)} / {formatBytes(user.storageLimit || 26214400)}
+                            {formatBytes(user.actualStorage || 0)} / {formatBytes(user.storageLimit || 26214400)}
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
