@@ -448,11 +448,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       
       // Update the canvas in PocketBase
-      await pb.client.collection('canvases').create({
-        user: pb.client.authStore.model.id,  // This links the canvas to your user account
+      await pb.client.collection('canvases').update(currentCanvas.id, {
         name: currentCanvas.name,
         data: canvasData,
-        size: canvasSize, 
+        size: canvasSize,
         updated: new Date().toISOString()
       });
       
