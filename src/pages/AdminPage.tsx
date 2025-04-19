@@ -78,11 +78,30 @@ const AdminPage: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch users with explicit fields
-      const userRecords = await pb.client.collection('users').getFullList({
-        sort: '-created',
-        fields: 'id,username,email,verified,role,canvasLimit,storageLimit,currentStorage'
+      // Check if we're logged in as admin
+      if (!pb.client.authStore.isValid || !pb.client.authStore.model.role || pb.client.authStore.model.role !== 'admin') {
+        toast.error("Admin authentication required");
+        return;
+      }
+  
+      // Try a different approach to get all user data
+      const userRecords = await pb.client.send('/api/collections/users/records', {
+        method: 'GET',
+        headers: {
+          // Include admin token explicitly
+          'Authorization': `Bearer ${pb.client.authStore.token}`
+        },
+        params: {
+          sort: '-created',
+          fields: '*',
+          perPage: 200
+        }
       });
+      
+      console.log('Raw user data from API:', userRecords);
+      
+      // Extract users from response
+      const users = userRecords?.items || [];
       
       // Separately fetch canvases with user relations
       const canvasRecords = await pb.client.collection('canvases').getFullList({
@@ -113,7 +132,7 @@ const AdminPage: React.FC = () => {
       });
       
       // Attach canvas counts and storage to users
-      const enhancedUsers = userRecords.map(user => ({
+      const enhancedUsers = users.map(user => ({
         ...user,
         canvasCount: userCanvasMap.get(user.id) || 0,
         actualStorage: userStorageMap.get(user.id) || 0
