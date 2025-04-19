@@ -69,7 +69,7 @@ const initializePeerFunc = (
       
       // Create a more robust configuration with more STUN/TURN servers
       const newPeer = new Peer(undefined, {
-        host: '192.168.178.102',
+        host: window.location.hostname,
         port: 9000,
         path: '/',
         debug: 1, // Lower debug level to reduce console noise
