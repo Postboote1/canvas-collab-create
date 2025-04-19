@@ -6,7 +6,7 @@ class PocketBaseService {
   public client: PocketBase;
   
   private constructor() {
-    this.client = new PocketBase('http://localhost:8090');
+    this.client = new PocketBase('https://pb.canvascollab.de');
     
     // Add auto-refresh of the auth store on token expiration
     this.client.autoCancellation(false);
