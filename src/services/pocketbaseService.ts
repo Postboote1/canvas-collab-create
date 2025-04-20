@@ -28,7 +28,11 @@ class PocketBaseService {
   public cancelRequest(key: string): void {
     if (this.activeRequests.has(key)) {
       const controller = this.activeRequests.get(key);
-      controller.abort();
+      try {
+        controller.abort();
+      } catch (err) {
+        console.warn('Error aborting request:', err);
+      }
       this.activeRequests.delete(key);
     }
   }
@@ -55,14 +59,25 @@ class PocketBaseService {
   public async getSettings() {
     try {
       const cancelKey = 'getSettings';
+      // Create controller and register it
+      const controller = new AbortController();
+      this.activeRequests.set(cancelKey, controller);
+      
       // Only get essential fields
       const settings = await this.client.collection('appSettings').getFirstListItem('', {
         fields: 'id,allowRegistration,maxCanvasesPerUser,maxStoragePerUser',
         $cancelKey: cancelKey
       });
       
+      // Clean up on success
+      this.activeRequests.delete(cancelKey);
       return settings;
     } catch (error) {
+      // Only log non-abort errors
+      if (error?.name !== 'AbortError') {
+        console.error('Error fetching settings:', error);
+      }
+      
       // Return default settings on error
       return {
         allowRegistration: true,
@@ -71,39 +86,114 @@ class PocketBaseService {
       };
     }
   }
-  
-  public async getUserStorageUsage(userId: string) {
-    try {
-      const user = await this.client.collection('users').getOne(userId);
-      return {
-        currentStorage: user.currentStorage || 0,
-        storageLimit: user.storageLimit || 26214400,
-        canvasCount: await this.getCanvasCount(userId),
-        canvasLimit: user.canvasLimit || 5
-      };
-    } catch (error) {
-      console.error('Failed to get user storage:', error);
-      return {
-        currentStorage: 0,
-        storageLimit: 26214400,
-        canvasCount: 0,
-        canvasLimit: 5
-      };
+
+    // Add safe request methods with better error handling
+    public async getCanvas(id: string) {
+      try {
+        const cancelKey = `canvas_${id}`;
+        // Create controller and register it
+        const controller = new AbortController();
+        this.activeRequests.set(cancelKey, controller);
+        
+        // Use it for the request
+        const record = await this.client.collection('canvases').getOne(id, {
+          $cancelKey: cancelKey,
+          expand: 'user'
+        });
+        
+        // Clean up on success
+        this.activeRequests.delete(cancelKey);
+        return record;
+      } catch (error) {
+        // Check if it's an abort error - don't report those
+        if (error?.name !== 'AbortError') {
+          console.error('Error fetching canvas:', error);
+        }
+        throw error;
+      }
     }
-  }
   
-  public async getCanvasCount(userId: string) {
-    try {
-      const resultList = await this.client.collection('canvases').getList(1, 1, {
-        filter: `user = "${userId}"`,
-        $cancelKey: 'canvasCount'
-      });
-      return resultList.totalItems;
-    } catch (error) {
-      console.error('Failed to get canvas count:', error);
-      return 0;
+    // Add method for canvas listings with proper error handling
+    public async getCanvasList() {
+      try {
+        const cancelKey = 'canvas_list';
+        const controller = new AbortController();
+        this.activeRequests.set(cancelKey, controller);
+        
+        const records = await this.client.collection('canvases').getList(1, 50, {
+          filter: 'user = current.id',
+          sort: '-updated',
+          $cancelKey: cancelKey
+        });
+        
+        this.activeRequests.delete(cancelKey);
+        return records;
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Error fetching canvas list:', error);
+        }
+        throw error;
+      }
     }
-  }
+  
+
+    public async getUserStorageUsage(userId: string) {
+      try {
+        const cancelKey = `user_storage_${userId}`;
+        const controller = new AbortController();
+        this.activeRequests.set(cancelKey, controller);
+  
+        // Get user directly with only needed fields
+        const user = await this.client.collection('users').getOne(userId, {
+          fields: 'currentStorage,storageLimit,canvasLimit',
+          $cancelKey: cancelKey
+        });
+        
+        // Get canvas count with efficient query
+        const canvasCount = await this.getCanvasCount(userId);
+        
+        this.activeRequests.delete(cancelKey);
+        return {
+          currentStorage: user.currentStorage || 0,
+          storageLimit: user.storageLimit || 26214400,
+          canvasCount: canvasCount,
+          canvasLimit: user.canvasLimit || 5
+        };
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to get user storage:', error);
+        }
+        return {
+          currentStorage: 0,
+          storageLimit: 26214400,
+          canvasCount: 0,
+          canvasLimit: 5
+        };
+      }
+    }
+  
+    public async getCanvasCount(userId: string) {
+      try {
+        const cancelKey = `canvas_count_${userId}`;
+        const controller = new AbortController();
+        this.activeRequests.set(cancelKey, controller);
+        
+        // Use an optimized query that just counts records
+        const result = await this.client.collection('canvases').getList(1, 1, {
+          filter: `user = "${userId}"`,
+          fields: 'COUNT(*) as count',
+          $cancelKey: cancelKey
+        });
+        
+        this.activeRequests.delete(cancelKey);
+        return result.totalItems || 0;
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to get canvas count:', error);
+        }
+        return 0;
+      }
+    }
   
   public async isAdmin() {
     if (!this.client.authStore.isValid) return false;
@@ -148,32 +238,36 @@ class PocketBaseService {
     }
   }
 
+  // Fixed and optimized server metrics
   public async getServerMetrics() {
     try {
-      // Browser environment - fetch the most recent metrics entry from the collection
-      try {
-        const result = await this.client.collection('serverMetrics').getList(1, 1, {
-          sort: '-created', // Get the most recent entry by creation time, not timestamp
-        });
-        
-        if (result.items.length > 0) {
-          const latestMetrics = result.items[0];
-          console.log("Retrieved latest metrics:", latestMetrics);
-          return {
-            cpu: typeof latestMetrics.cpu === 'number' ? latestMetrics.cpu : 0,
-            memory: typeof latestMetrics.memory === 'number' ? latestMetrics.memory : 0,
-            totalMemory: 8 * 1024 * 1024 * 1024, // Estimate 8GB as default if not available
-            storage: typeof latestMetrics.storage === 'number' ? latestMetrics.storage : 0,
-            activeUsers: typeof latestMetrics.activeUsers === 'number' ? latestMetrics.activeUsers : 0,
-            apiRequests: typeof latestMetrics.apiRequests === 'number' ? latestMetrics.apiRequests : 0,
-            timestamp: latestMetrics.timestamp
-          };
-        }
-      } catch (error) {
-        console.error('Failed to fetch server metrics from collection:', error);
+      const cancelKey = 'server_metrics';
+      const controller = new AbortController();
+      this.activeRequests.set(cancelKey, controller);
+      
+      // Get only the latest metrics record
+      const result = await this.client.collection('serverMetrics').getList(1, 1, {
+        sort: '-timestamp',
+        fields: 'cpu,memory,totalMemory,storage,activeUsers,apiRequests,timestamp',
+        $cancelKey: cancelKey
+      });
+      
+      this.activeRequests.delete(cancelKey);
+      
+      if (result?.items?.length > 0) {
+        const latestMetrics = result.items[0];
+        return {
+          cpu: typeof latestMetrics.cpu === 'number' ? latestMetrics.cpu : 0,
+          memory: typeof latestMetrics.memory === 'number' ? latestMetrics.memory : 0,
+          totalMemory: typeof latestMetrics.totalMemory === 'number' ? latestMetrics.totalMemory : 8 * 1024 * 1024 * 1024,
+          storage: typeof latestMetrics.storage === 'number' ? latestMetrics.storage : 0,
+          activeUsers: typeof latestMetrics.activeUsers === 'number' ? latestMetrics.activeUsers : 0,
+          apiRequests: typeof latestMetrics.apiRequests === 'number' ? latestMetrics.apiRequests : 0,
+          timestamp: latestMetrics.timestamp
+        };
       }
       
-      // Fallback to default metrics if collection fetch failed
+      // Fallback to default metrics if no records
       return {
         cpu: 0,
         memory: 0,
@@ -183,7 +277,9 @@ class PocketBaseService {
         apiRequests: 0
       };
     } catch (error) {
-      console.error('Error collecting server metrics:', error);
+      if (error?.name !== 'AbortError') {
+        console.error('Error collecting server metrics:', error);
+      }
       return {
         cpu: 0,
         memory: 0,
@@ -194,6 +290,7 @@ class PocketBaseService {
       };
     }
   }
+
   // Method to create a serverMetrics record
   public async recordServerMetrics() {
     try {
