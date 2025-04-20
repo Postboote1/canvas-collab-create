@@ -192,7 +192,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [syncComplete, setSyncComplete] = useState(false);
   const [canvasStateSynced, setCanvasStateSynced] = useState(false);
   const { user } = useAuth();
-
+  const imageObjectURLs = useRef<Map<string, string>>(new Map());
   // Add persistent peer reference
   const peerRef = useRef<Peer | null>(null);
   const processedElementIDs = useRef<Set<string>>(new Set());
@@ -1345,6 +1345,28 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [registerHandler, sendMessage, currentCanvas, setCurrentCanvas, connections, handleMessage, peerId]);
 
+
+  const cleanupUnusedImages = () => {
+    if (!currentCanvas) return;
+    
+    const activeImageIds = new Set();
+    
+    // Collect all active image IDs
+    currentCanvas.elements.forEach(element => {
+      if (element.type === 'image') {
+        activeImageIds.add(element.id);
+      }
+    });
+    
+    // Clean up any object URLs not in active use
+    imageObjectURLs.current.forEach((url, id) => {
+      if (!activeImageIds.has(id)) {
+        console.log(`Cleaning up unused image: ${id}`);
+        URL.revokeObjectURL(url);
+        imageObjectURLs.current.delete(id);
+      }
+    });
+  };
   // Add a server status checker
 
   // Add this to your WebSocketProvider
@@ -1372,6 +1394,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     
     return () => clearInterval(interval);
   }, []);
+
+  
 
   return (
     <WebSocketContext.Provider value={contextValue}>

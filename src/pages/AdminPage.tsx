@@ -317,24 +317,21 @@ const AdminPage: React.FC = () => {
       fetchData();
       fetchCurrentMetrics();
       fetchHistoricalMetrics('7d');
-      
+
       // Use ref to track the interval for cleanup
-      const intervalRef = { current: null };
-      
-      // Function to fetch and schedule next update
+      let intervalRef: { current: any } = { current: null };
+
       const fetchAndSchedule = async () => {
         try {
           await fetchCurrentMetrics();
         } catch (err) {
           console.error('Error in metrics update interval:', err);
         }
-        // Schedule next update
         intervalRef.current = setTimeout(fetchAndSchedule, 30000);
       };
-      
-      // Start the interval cycle
+
       intervalRef.current = setTimeout(fetchAndSchedule, 30000);
-      
+
       return () => {
         if (intervalRef.current) {
           clearTimeout(intervalRef.current);

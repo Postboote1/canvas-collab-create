@@ -61,14 +61,14 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   // Cleanup event listeners when component unmounts or when resizing stops
   useEffect(() => {
     const handleResizeMoveGlobal = (e: MouseEvent) => {
-        if (isResizing) {
-            handleResizeMove(e);
-        }
+      if (isResizing) {
+        handleResizeMove(e);
+      }
     };
     const handleResizeEndGlobal = () => {
-        if (isResizing) {
-            handleResizeEnd();
-        }
+      if (isResizing) {
+        handleResizeEnd();
+      }
     };
 
     // Only add the event listeners if we're currently resizing
@@ -83,6 +83,20 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       };
     }
   }, [isResizing]);
+
+  // MOVED TO TOP LEVEL: Separate effect for image cleanup
+  useEffect(() => {
+    // Cleanup effect for component unmount or element change
+    return () => {
+      // If this is an image element that's being removed, help trigger cleanup
+      if (element.type === 'image' && element.imageUrl) {
+        // Signal that this image can be cleaned up on next cycle
+        window.dispatchEvent(new CustomEvent('image-element-removed', { 
+          detail: { elementId: element.id }
+        }));
+      }
+    };
+  }, [element.id, element.type, element.imageUrl]);
 
   const handleDoubleClick = () => {
     if (!readOnly && (element.type === 'card' || element.type === 'text')) {

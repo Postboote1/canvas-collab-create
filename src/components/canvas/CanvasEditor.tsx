@@ -1,5 +1,5 @@
 // src/components/canvas/CanvasEditor.tsx
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
@@ -8,6 +8,7 @@ import CanvasElement from './CanvasElement';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { debounce } from 'lodash'; 
 
 interface CanvasEditorProps {
   readOnly?: boolean;
@@ -29,22 +30,113 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const [scale, setScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
   const [panStartPosition, setPanStartPosition] = useState({ x: 0, y: 0 });
-
+  const [isLoading, setIsLoading] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-save every 30 seconds
+  // Store a ref of all object URLs to revoke them on delete
+  const imageObjectURLs = useRef<Map<string, string>>(new Map());
+
+  // Utility to create object URL for image file
+  const createImageObjectURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          // Scale large images down to max dimensions
+          const maxDimension = 1200;
+          let { width, height } = img;
+          
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+          
+          // Create a canvas to compress the image
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Could not get canvas context'));
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Use a more efficient format and compression
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const url = URL.createObjectURL(blob);
+                resolve(url);
+              } else {
+                reject(new Error('Failed to create blob'));
+              }
+            },
+            'image/jpeg',  // JPEG is smaller than PNG for photos
+            0.7  // 70% quality gives good balance of quality vs size
+          );
+        };
+        img.onerror = reject;
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Create debounced functions for network operations
+  const debouncedSendUpdate = useCallback(
+    debounce((id: string, updates: Partial<CanvasElementType>) => {
+      if (isConnected && sendMessage) {
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'update',
+            element: { 
+              id, 
+              ...updates,
+              _timestamp: Date.now() 
+            }
+          }
+        });
+      }
+    }, 100), // 100ms debounce
+    [isConnected, sendMessage]
+  );
+
+  // Auto-save every 30 seconds, but only if there are changes
   useEffect(() => {
     if (!readOnly && currentCanvas) {
+      let lastElements = JSON.stringify(currentCanvas.elements);
       const interval = setInterval(() => {
-        saveCanvas();
+        // Only save if elements changed
+        const nowElements = JSON.stringify(currentCanvas.elements);
+        if (nowElements !== lastElements) {
+          saveCanvas();
+          lastElements = nowElements;
+        }
       }, 30000);
 
       return () => clearInterval(interval);
     }
   }, [readOnly, currentCanvas, saveCanvas]);
 
+  useEffect(() => {
+    // Clean up all object URLs when component is unmounted
+    return () => {
+      // Revoke object URLs to prevent memory leaks
+      imageObjectURLs.current.forEach(url => {
+        URL.revokeObjectURL(url);
+      });
+      imageObjectURLs.current.clear();
+    };
+  }, []);
   // Remove the effect that was auto-connecting to peers
   // This connection should only happen when the Share button is clicked
 
@@ -496,6 +588,12 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   // Handle element deletion
   const handleDeleteElement = (id: string) => {
+    // Revoke object URL if this is an image
+    const url = imageObjectURLs.current.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      imageObjectURLs.current.delete(id);
+    }
     deleteElement(id);
   
     // Send delete operation to peers
@@ -577,34 +675,73 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     return newElement;
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Utility to compress and resize image
+  const compressImage = (file: File, maxSize = 1024): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.onload = () => {
+          // Resize
+          let { width, height } = img;
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            } else {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('No canvas context'));
+          ctx.drawImage(img, 0, 0, width, height);
+          // Compress to JPEG (much smaller than PNG)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(dataUrl);
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !canvasRef.current || readOnly) return;
-
-    const file = e.target.files[0];
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-      if (!event.target?.result) return;
-
+  
+    try {
+      const file = e.target.files[0];
+      setIsLoading(true); // Now this will work with our added state
+      
+      // Process and compress the image
+      const objectUrl = await createImageObjectURL(file);
+      
+      // Generate a unique ID for the image element
+      const imageId = `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      imageObjectURLs.current.set(imageId, objectUrl);
+  
       const rect = canvasRef.current!.getBoundingClientRect();
-      // Place image in the center of the current view
       const centerX = (rect.width / 2) / scale + viewportPosition.x;
       const centerY = (rect.height / 2) / scale + viewportPosition.y;
-
-      const newImage: Omit<CanvasElementType, 'id'> = {
+  
+      const newImage: CanvasElementType = {
+        id: imageId,
         type: 'image',
-        x: centerX - 100, // Center based on default size
+        x: centerX - 100,
         y: centerY - 75,
         width: 200,
         height: 150,
-        imageUrl: event.target.result as string
+        imageUrl: objectUrl
       };
-
+  
       addElement(newImage);
-      toast.success('Image added', {
-        position: 'bottom-center',
-      });
-
+      toast.success('Image added', { position: 'bottom-center' });
+  
       if (isConnected) {
         sendMessage({
           type: 'canvasOperation',
@@ -614,12 +751,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           }
         });
       }
-
+  
       setActiveTool('select');
-    };
-
-    reader.readAsDataURL(file);
-    e.target.value = ''; // Clear input
+    } catch (err) {
+      console.error('Error uploading image:', err);
+      toast.error('Failed to upload image');
+    } finally {
+      setIsLoading(false); // Clear loading state
+      if (e.target) e.target.value = ''; // Clear input to allow same file selection
+    }
   };
 
   const handleExportAsImage = () => {
@@ -631,18 +771,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     // Temporarily reset scale and position for accurate capture
     const originalScale = scale;
     const originalPosition = { ...viewportPosition };
-    // TODO: Calculate actual bounds of content instead of resetting to 0,0
-    // For now, reset to capture from top-left; might miss content
     setScale(1);
     setViewportPosition({ x: 0, y: 0 });
 
-    setTimeout(() => {
+    let timeoutId: number | undefined = undefined;
+
+    timeoutId = window.setTimeout(() => {
       html2canvas(contentRef.current!, {
-        backgroundColor: null, // Transparent background
+        backgroundColor: null,
         scale: window.devicePixelRatio,
         allowTaint: true,
         useCORS: true,
-        // TODO: Set width/height/x/y based on calculated content bounds
       }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const link = document.createElement('a');
@@ -654,11 +793,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         console.error('Image export failed:', err);
         toast.error('Failed to export canvas as image');
       }).finally(() => {
-        // Restore original scale and position
         setScale(originalScale);
         setViewportPosition(originalPosition);
       });
     }, 100);
+
+    // Cleanup timeout if component unmounts before export
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   };
 
   const handleExportAsPDF = () => {
@@ -669,17 +812,17 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
     const originalScale = scale;
     const originalPosition = { ...viewportPosition };
-    // TODO: Calculate actual bounds
     setScale(1);
     setViewportPosition({ x: 0, y: 0 });
 
-    setTimeout(() => {
+    let timeoutId: number | undefined = undefined;
+
+    timeoutId = window.setTimeout(() => {
       html2canvas(contentRef.current!, {
-        backgroundColor: '#ffffff', // White background for PDF
-        scale: window.devicePixelRatio * 2, // Higher scale for PDF quality
+        backgroundColor: '#ffffff',
+        scale: window.devicePixelRatio * 2,
         allowTaint: true,
         useCORS: true,
-        // TODO: Set width/height/x/y based on calculated content bounds
       }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
@@ -698,6 +841,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         setViewportPosition(originalPosition);
       });
     }, 100);
+
+    // Cleanup timeout if component unmounts before export
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   };
 
   // Expose export methods globally
@@ -753,7 +901,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     });
     
     return () => {
-      unregisterUpdateHandler();
+      if (typeof unregisterUpdateHandler === 'function') {
+        unregisterUpdateHandler();
+      }
     };
   }, [isConnected, registerHandler, currentCanvas, setCurrentCanvas]);
 
@@ -780,9 +930,21 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     });
     
     return () => {
-      unregisterDebugHandler();
+      if (typeof unregisterDebugHandler === 'function') {
+        unregisterDebugHandler();
+      }
     };
   }, [isConnected, registerHandler]);
+
+  // On unmount, revoke all object URLs
+  useEffect(() => {
+    return () => {
+      imageObjectURLs.current.forEach(url => {
+        URL.revokeObjectURL(url);
+      });
+      imageObjectURLs.current.clear();
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-full dark:bg-zinc-800">
@@ -810,13 +972,13 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           ref={canvasRef}
           className="absolute w-full h-full canvas-background dark:bg-zinc-900"
           style={{
-            width: '100000px',
-            height: '100000px',
+            width: '5000px', // Reduced from 100000px
+            height: '5000px', // Reduced from 100000px
             transform: `translate(${-(viewportPosition.x * scale)}px, ${-(viewportPosition.y * scale)}px) scale(${scale})`,
             transformOrigin: '0 0',
             cursor: isPanning ? 'grabbing' : (activeTool === 'select' ? 'default' : 'crosshair'),
-            left: `calc(50% - 50000px * ${scale})`,
-            top: `calc(50% - 50000px * ${scale})`,
+            left: `calc(50% - 2500px * ${scale})`, // Adjusted for new size
+            top: `calc(50% - 2500px * ${scale})`,
             touchAction: 'none',
           }}
           onMouseDown={(e) => { if (e.button !== 2) handleCanvasMouseDown(e); }}
