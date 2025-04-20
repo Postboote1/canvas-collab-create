@@ -1,15 +1,20 @@
 import PocketBase from 'pocketbase';
-import os from 'os'; // Node.js built-in
-// Create a singleton instance
+
 class PocketBaseService {
   private static instance: PocketBaseService;
   public client: PocketBase;
+  private activeRequests: Map<string, AbortController> = new Map();
   
   private constructor() {
     this.client = new PocketBase('https://pb.canvascollab.de');
     
-    // Add auto-refresh of the auth store on token expiration
-    this.client.autoCancellation(false);
+    // IMPORTANT: Enable auto-cancellation (it was disabled before)
+    this.client.autoCancellation(true);
+    
+    // Listen for browser navigation to clean up requests
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => this.cancelAllRequests());
+    }
   }
   
   public static getInstance(): PocketBaseService {
@@ -19,20 +24,46 @@ class PocketBaseService {
     return PocketBaseService.instance;
   }
   
+  // Add proper request management
+  public cancelRequest(key: string): void {
+    if (this.activeRequests.has(key)) {
+      const controller = this.activeRequests.get(key);
+      controller.abort();
+      this.activeRequests.delete(key);
+    }
+  }
+  
+  public cancelAllRequests(): void {
+    this.activeRequests.forEach(controller => {
+      try {
+        controller.abort();
+      } catch (e) {
+        // Ignore abort errors
+      }
+    });
+    this.activeRequests.clear();
+    
+    // Force cancel any lingering PocketBase requests
+    try {
+      this.client.cancelAllRequests();
+    } catch (e) {
+      console.error("Error cancelling PB requests:", e);
+    }
+  }
+  
+  // Optimize setting fetching to use fewer resources
   public async getSettings() {
     try {
-      // First try to get settings as a regular request
-      const settings = await this.client.collection('appSettings').getFirstListItem('');
+      const cancelKey = 'getSettings';
+      // Only get essential fields
+      const settings = await this.client.collection('appSettings').getFirstListItem('', {
+        fields: 'id,allowRegistration,maxCanvasesPerUser,maxStoragePerUser',
+        $cancelKey: cancelKey
+      });
+      
       return settings;
     } catch (error) {
-      // Log with different severity based on error type
-      if (error.status === 403) {
-        console.log('Using default settings (permission error)');
-      } else {
-        console.error('Failed to get app settings:', error);
-      }
-      
-      // Return default settings regardless of error
+      // Return default settings on error
       return {
         allowRegistration: true,
         maxCanvasesPerUser: 5,
