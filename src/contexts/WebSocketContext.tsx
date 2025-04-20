@@ -3,7 +3,9 @@ import Peer, { DataConnection } from 'peerjs';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import { useCanvas } from './CanvasContext';
-
+import { debounce } from 'lodash';
+import { useLocation } from 'react-router-dom';
+import { convertImageUrlsToBase64 } from '@/lib/imageUtils';
 // Types
 interface MessageHandler {
   (payload: any): void;
@@ -28,7 +30,7 @@ export interface WebSocketContextType {
   peerId: string | null;
   isConnected: boolean;
   isPeerInitialized: boolean;
-  connections: DataConnection[];
+  connections: Array<{peer: string, open: boolean}>; 
   connect: (joinCode: string) => Promise<void>;
   disconnect: () => void;
   sendMessage: (message: Message) => void;
@@ -193,44 +195,222 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [canvasStateSynced, setCanvasStateSynced] = useState(false);
   const { user } = useAuth();
   const imageObjectURLs = useRef<Map<string, string>>(new Map());
+  const { pathname: location } = useLocation();
+  const [shouldBeActive, setShouldBeActive] = useState(false);
   // Add persistent peer reference
   const peerRef = useRef<Peer | null>(null);
   const processedElementIDs = useRef<Set<string>>(new Set());
   const processedOperations = useRef<Set<string>>(new Set());
   const addedElementIds = useRef<Set<string>>(new Set());
   const [currentCanvas, setCurrentCanvas] = useState<any>(null);
+  const isCleaningUp = useRef(false);
+  const cleanupAttempts = useRef(0);
 
-  // DON'T use useCanvas here - it creates a circular dependency
-  // Instead, use a context bridge pattern to access canvas data when needed
-  
-  // useEffect(() => {
-  //   try {
-  //     const canvasValues = useCanvas();
-  //     setCanvasContext(canvasValues);
-  //   } catch (error) {
-  //     console.error("Error getting CanvasContext:", error);
-  //   }
-  // }, []);
-  
-  // Remove these lines
-  // const currentCanvas = canvasContext?.currentCanvas;
-  // const setCurrentCanvas = canvasContext?.setCurrentCanvas;
+
+  const debouncedSaveToLocalStorage = useCallback(
+    debounce((canvas: any) => {
+      try {
+        localStorage.setItem('pendingCanvasState', JSON.stringify(canvas));
+      } catch (error) {
+        console.error('Failed to save canvas to localStorage:', error);
+      }
+    }, 300),
+    []
+  );
+
+  // Effect to check if we should activate WebSocket functionality
+  useEffect(() => {
+    const isCanvasPage = location.includes('/canvas') || 
+                        location.includes('/join') || 
+                        location.includes('/presentation');
+    
+    setShouldBeActive(isCanvasPage);
+    
+    // Reset circuit breaker if we navigate to canvas page
+    if (isCanvasPage) {
+      cleanupAttempts.current = 0;
+      isCleaningUp.current = false;
+      return;
+    }
+    
+    // Circuit breaker to prevent infinite loops
+    if (cleanupAttempts.current > 3) {
+      console.warn('Too many cleanup attempts, preventing loop');
+      return;
+    }
+    
+    // Prevent concurrent cleanups
+    if (isCleaningUp.current) {
+      console.log('Cleanup already in progress, skipping');
+      return;
+    }
+    
+    // Track this attempt
+    cleanupAttempts.current += 1;
+    isCleaningUp.current = true;
+    
+    // CRITICAL: Aggressive cleanup when leaving canvas page
+    const performThoroughCleanup = () => {
+      console.log('🧹 Leaving canvas page - performing thorough cleanup');
+      try {
+        // 1. Clear all stored image URLs
+        imageObjectURLs.current.forEach((url) => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            // Ignore errors
+          }
+        });
+        imageObjectURLs.current.clear();
+        
+        // 2. Clear all connections
+        connections.forEach(conn => {
+          if (conn) {
+            // Remove all listeners first
+            const safeEvents: ConnectionEventType[] = ['data', 'open', 'close', 'error'];
+            safeEvents.forEach(event => {
+              try {
+                conn.removeAllListeners(event);
+              } catch (e) {
+                // Ignore errors
+              }
+            });
+            
+            // Then close the connection
+            try {
+              conn.close();
+            } catch (e) {
+              // Ignore errors
+            }
+          }
+        });
+        
+        // 3. Destroy peer instance
+        if (peer && !peer.destroyed) {
+          try {
+            peer.removeAllListeners();
+            peer.destroy();
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+        
+        // 4. Clear localStorage items that might be large
+        localStorage.removeItem('pendingCanvasState');
+        localStorage.removeItem('globalElementRegistry');
+        
+        // 5. Clear all caches and refs
+        processedElementIDs.current.clear();
+        processedOperations.current.clear();
+        addedElementIds.current.clear();
+        processedMessages.current.clear();
+        
+        // 6. Batch state updates to avoid render loops - CRITICAL FIX
+        setTimeout(() => {
+          setPeer(null);
+          peerRef.current = null;
+          setConnections([]);
+          setPeerId(null);
+          setIsConnected(false);
+          setIsPeerInitialized(false);
+          setCanvasStateSynced(false);
+          
+          // Delay current canvas update to prevent immediate re-renders
+          setTimeout(() => {
+            setCurrentCanvas(null);
+          }, 50);
+          
+          // Reset cleaning state after all updates
+          setTimeout(() => {
+            isCleaningUp.current = false;
+          }, 500);
+        }, 0);
+        
+        // 7. Force garbage collection if possible
+        if (window.gc) window.gc();
+      } catch (e) {
+        console.error('Error during thorough cleanup:', e);
+        isCleaningUp.current = false;
+      }
+    };
+    
+    // Execute cleanup with a slight delay to ensure all state updates are processed
+    const timeoutId = setTimeout(performThoroughCleanup, 100);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [location]); // IMPORTANT: Only depend on location, not on state we're updating
+
+  // Global connection manager to track and cleanup all Peer.js instances
+  useEffect(() => {
+    // Define a global cleanup function to be called from anywhere
+    (window as any).cleanupAllPeerConnections = () => {
+      if (peer && !peer.destroyed) {
+        try {
+          peer.removeAllListeners();
+          peer.destroy();
+          console.log('Destroyed peer instance through global cleanup');
+        } catch (e) {
+          console.error('Error destroying peer in global cleanup:', e);
+        }
+      }
+      
+      // Reset all our state
+      setPeer(null);
+      peerRef.current = null;
+      setConnections([]);
+      setIsConnected(false);
+      processedElementIDs.current.clear();
+      processedOperations.current.clear();
+      addedElementIds.current.clear();
+      
+      // Clear any canvas data from localStorage to prevent memory leaks
+      localStorage.removeItem('pendingCanvasState');
+      
+      return true;
+    };
+    
+    // Expose this cleanup function globally
+    (window as any).wsCleaner = (window as any).cleanupAllPeerConnections;
+    
+    return () => {
+      // Always cleanup on provider unmount
+      if ((window as any).cleanupAllPeerConnections) {
+        (window as any).cleanupAllPeerConnections();
+      }
+      delete (window as any).cleanupAllPeerConnections;
+      delete (window as any).wsCleaner;
+    };
+  }, [peer]);
 
   // Clean up peer on unmount
   useEffect(() => {
     return () => {
-      // Only cleanup on full unmount, not navigation
-      if (peer && window.location.pathname === '/') {
-        console.log('Cleaning up peer on final unmount');
+      // Close and clean up all connections on unmount
+      connections.forEach(conn => {
+        if (conn && conn.open) {
+          // Remove all listeners before closing
+          conn.removeAllListeners('data');
+          conn.removeAllListeners('open');
+          conn.removeAllListeners('close');
+          conn.removeAllListeners('error');
+          conn.close();
+        }
+      });
+      
+      // Destroy peer completely
+      if (peer && !peer.destroyed) {
+        // Remove all listeners before destroying
+        peer.removeAllListeners('open');
+        peer.removeAllListeners('connection');
+        peer.removeAllListeners('disconnected');
+        peer.removeAllListeners('close');
+        peer.removeAllListeners('error');
         peer.destroy();
-        peerRef.current = null;
-        setPeer(null);
-        setPeerId(null);
-        setIsPeerInitialized(false);
-        setConnections([]);
       }
     };
-  }, [peer]);
+  }, []);
 
   useEffect(() => {
     // Initialize a global element registry in localStorage if it doesn't exist
@@ -247,17 +427,43 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   
   // Register a handler for a specific message type
   const registerHandler = useCallback((type: string, handler: MessageHandler) => {
-    //console.log('Registering handler for:', type);
-    setMessageHandlers(prev => ({
-      ...prev,
-      [type]: [...(prev[type] || []), handler]
-    }));
-
-    return () => {
-      setMessageHandlers(prev => ({
+    // Create a unique ID for this handler for more reliable cleanup
+    const handlerId = `handler_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
+    setMessageHandlers(prev => {
+      const existing = prev[type] || [];
+      // Don't add duplicate handlers
+      if (existing.includes(handler)) {
+        return prev;
+      }
+      return {
         ...prev,
-        [type]: prev[type]?.filter(h => h !== handler) || []
-      }));
+        [type]: [...existing, handler]
+      };
+    });
+  
+    // Return a more reliable cleanup function
+    return () => {
+      setMessageHandlers(prev => {
+        // If no handlers exist for this type, do nothing
+        if (!prev[type]) return prev;
+        
+        // Filter out this specific handler
+        const filtered = prev[type].filter(h => h !== handler);
+        
+        // If no handlers left for this type, remove the key entirely
+        if (filtered.length === 0) {
+          const newHandlers = {...prev};
+          delete newHandlers[type];
+          return newHandlers;
+        }
+        
+        // Otherwise update with filtered handlers
+        return {
+          ...prev,
+          [type]: filtered
+        };
+      });
     };
   }, []);
   
@@ -424,13 +630,33 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.log('Connection opened with peer:', conn.peer);
       setIsConnected(true);
       
-      // Request canvas state when connection is established
-      conn.send({
-        type: 'requestCanvasState',
-        payload: { sender: peerId },  // Use payload.sender consistently
-        sender: peerId,
-        timestamp: Date.now()
-      });
+      // Attach data handler ONCE - not repeatedly
+      if (!conn.listenerCount('data')) {
+        conn.on('data', (data) => {
+          try {
+            // Don't keep a reference to the original data
+            const processedData = JSON.parse(JSON.stringify(data));
+            
+            // Process the operation without retaining references
+            if (processedData && processedData.type) {
+              handleMessage(processedData.type, processedData.payload);
+            }
+          } catch (error) {
+            console.error('Error processing data:', error);
+          }
+        });
+      }
+      
+      // Add ONE close handler
+      if (!conn.listenerCount('close')) {
+        conn.on('close', () => {
+          console.log('Connection closed with peer:', conn.peer);
+          setIsConnected(false);
+          
+          // Remove the connection from our list
+          setConnections(prev => prev.filter(c => c !== conn));
+        });
+      }
     });
 
     conn.on('close', () => {
@@ -528,6 +754,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Now update initializePeer to use the extracted function
   const initializePeer = useCallback(async (): Promise<string> => {
+    
     if (peerInitializationPromise) {
       return peerInitializationPromise;
     }
@@ -709,22 +936,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsConnected(false);
     toast.info('Disconnected from all peers');
   }, [connections]);
-
-  useEffect(() => {
-    return () => {
-      // Remove peer teardown to keep peer alive across navigation
-      // disconnect();
-      // peer.destroy();
-      // setPeer(null);
-      // setPeerId(null);
-      // setIsPeerInitialized(false);
-      // setConnectionAttempts(0);
-      // setIsReconnecting(false);
-    };
-  }, [peer]);
   
   // Send message to all connected peers
   const sendMessage = useCallback((message: Message) => {
+    if (connections.length === 0) return;
     console.log('Sending message to all peers:', message);
 
     // For canvas operations, make sure to process them locally as well
@@ -897,23 +1112,41 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [peerId, generateShareLink]);
   
   // 3. Update dependencies in contextValue
-  const contextValue = useMemo(() => ({
-    peerId,
-    isConnected,
-    isPeerInitialized,
-    connections,
-    connect,
-    disconnect,
-    sendMessage,
-    registerHandler,
-    generateShareLink,
-    generateQRCode,
-    initializePeer,
-    syncComplete: canvasStateSynced,
-    // Add the canvas state setter to allow updating from connection
-    setWebSocketCanvasState: setCurrentCanvas,
-    currentWebSocketCanvas: currentCanvas
-  }), [
+  const contextValue = useMemo(() => {
+    // Create a safe version of the canvas without circular references
+    const safeCanvas = currentCanvas ? {
+      id: currentCanvas.id,
+      name: currentCanvas.name,
+      // Only include necessary properties
+    } : null;
+    
+    return {
+      peerId,
+      isConnected,
+      isPeerInitialized,
+      // Use a safe array copy to avoid circular references
+      connections: connections.map(conn => ({ 
+        peer: conn.peer, 
+        open: conn.open
+      })),
+      connect,
+      disconnect,
+      sendMessage,
+      registerHandler,
+      generateShareLink,
+      generateQRCode,
+      initializePeer,
+      syncComplete: canvasStateSynced,
+      // Add safety check to prevent update loops
+      setWebSocketCanvasState: (canvas) => {
+        // Skip null updates during cleanup to prevent loops
+        if (canvas !== null || !isCleaningUp.current) {
+          setCurrentCanvas(canvas);
+        }
+      },
+      currentWebSocketCanvas: safeCanvas
+    };
+  }, [
     peerId,
     isConnected,
     isPeerInitialized,
@@ -926,8 +1159,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     generateQRCode,
     initializePeer,
     canvasStateSynced,
-    currentCanvas,
-    setCurrentCanvas
+    currentCanvas
   ]);
 
   // 2. Update useEffect with proper currentCanvas access
@@ -1236,7 +1468,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               return el;
             })
           };
-          
+          const canvasWithBase64Images = convertImageUrlsToBase64(updatedCanvas);
+          localStorage.setItem('pendingCanvasState', JSON.stringify(canvasWithBase64Images));
           // Update the canvas state and localStorage
           setCurrentCanvas(updatedCanvas);
           localStorage.setItem('pendingCanvasState', JSON.stringify(updatedCanvas));
@@ -1346,31 +1579,139 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [registerHandler, sendMessage, currentCanvas, setCurrentCanvas, connections, handleMessage, peerId]);
 
 
-  const cleanupUnusedImages = () => {
-    if (!currentCanvas) return;
+  const cleanupUnusedImages = useCallback(() => {
+    console.log('Running periodic image cleanup...');
     
+    // Get current canvas from localStorage
+    let currentCanvasData = null;
+    try {
+      const canvasStr = localStorage.getItem('pendingCanvasState');
+      if (canvasStr) {
+        currentCanvasData = JSON.parse(canvasStr);
+      } else if (currentCanvas) {
+        currentCanvasData = currentCanvas;
+      }
+    } catch (error) {
+      console.error('Error parsing canvas data during cleanup:', error);
+    }
+    
+    // Create set of active image IDs
     const activeImageIds = new Set();
     
-    // Collect all active image IDs
-    currentCanvas.elements.forEach(element => {
-      if (element.type === 'image') {
-        activeImageIds.add(element.id);
-      }
-    });
+    // Only collect IDs if we have canvas data
+    if (currentCanvasData && Array.isArray(currentCanvasData.elements)) {
+      currentCanvasData.elements.forEach(element => {
+        if (element.type === 'image') {
+          activeImageIds.add(element.id);
+        }
+      });
+    }
     
-    // Clean up any object URLs not in active use
+    // Report counts
+    console.log(`Image cleanup: ${imageObjectURLs.current.size} URLs, ${activeImageIds.size} active images`);
+    
+    // Clean up all unused object URLs
     imageObjectURLs.current.forEach((url, id) => {
       if (!activeImageIds.has(id)) {
-        console.log(`Cleaning up unused image: ${id}`);
-        URL.revokeObjectURL(url);
-        imageObjectURLs.current.delete(id);
+        try {
+          console.log(`Cleaning up unused image: ${id}`);
+          URL.revokeObjectURL(url);
+          imageObjectURLs.current.delete(id);
+        } catch (error) {
+          console.error('Error revoking URL:', error);
+        }
       }
     });
-  };
+  }, [currentCanvas]);
+
+  useEffect(() => {
+    if (!shouldBeActive) return;
+    cleanupUnusedImages();
+    const cleanupTimer = setInterval(cleanupUnusedImages, 30000);
+    const handleCanvasExit = () => cleanupUnusedImages();
+    window.addEventListener('canvas-page-unload', handleCanvasExit);
+    return () => {
+      clearInterval(cleanupTimer);
+      window.removeEventListener('canvas-page-unload', handleCanvasExit);
+    };
+  }, [cleanupUnusedImages, shouldBeActive]);
+
+  useEffect(() => {
+    const handleImageRemoved = (event: CustomEvent) => {
+      if (event.detail && event.detail.elementId && event.detail.imageUrl) {
+        // If the URL is an object URL, revoke it
+        if (event.detail.imageUrl.startsWith('blob:')) {
+          try {
+            URL.revokeObjectURL(event.detail.imageUrl);
+            console.log('Revoked URL for removed image:', event.detail.elementId);
+          } catch (error) {
+            console.error('Error revoking object URL:', error);
+          }
+        }
+      }
+    };
+  
+    // Add event listener
+    window.addEventListener('image-element-removed', handleImageRemoved as EventListener);
+    
+    return () => {
+      window.removeEventListener('image-element-removed', handleImageRemoved as EventListener);
+    };
+  }, []);
   // Add a server status checker
 
   // Add this to your WebSocketProvider
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  type ConnectionEventType = 'data' | 'open' | 'close' | 'error' | 'iceStateChanged';
+  const validEvents: ConnectionEventType[] = ['data', 'open', 'close', 'error'];
+
+
+  useEffect(() => {
+    // Run garbage collection on connections periodically
+    const cleanupInterval = setInterval(() => {
+      setConnections(prevConnections => {
+        // Filter out closed or errored connections - only use 'open' property
+        const activeConnections = prevConnections.filter(conn => 
+          conn && conn.open // Don't check 'destroyed' - it's not in the type definition
+        );
+        
+        // Close any connections no longer in our filtered list
+        prevConnections.forEach(conn => {
+          if (conn && !activeConnections.includes(conn)) {
+            try {
+              // Remove listeners before closing
+              if (conn.listenerCount) {
+                // If listenerCount is available, use it
+                validEvents.forEach(event => {
+                  if (conn.listenerCount(event) > 0) {
+                    conn.removeAllListeners(event);
+                  }
+                });
+              }
+              conn.close();
+            } catch (err) {
+              console.error('Error cleaning up connection:', err);
+            }
+          }
+        });
+        
+        return activeConnections;
+      });
+    }, 30000); // Run every 30 seconds
+    
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldBeActive) return;
+    const memoryMonitor = setInterval(() => {
+      if ((window.performance as any)?.memory) {
+        const used = Math.round((window.performance as any).memory.usedJSHeapSize / (1024 * 1024));
+        if (!shouldBeActive && used > 300) cleanupUnusedImages();
+      }
+    }, 5000);
+    return () => clearInterval(memoryMonitor);
+  }, [shouldBeActive, cleanupUnusedImages]);
 
   useEffect(() => {
     const checkServerStatus = async () => {

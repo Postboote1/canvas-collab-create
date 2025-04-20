@@ -1,22 +1,65 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom'    
 import { useCanvas } from './CanvasContext';
 import { useWebSocket } from './WebSocketContext';
 import { toast } from 'sonner';
 
 export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { pathname } = useLocation();
   const { setCurrentCanvas, currentCanvas } = useCanvas();
   const { registerHandler, sendMessage, setWebSocketCanvasState } = useWebSocket();
+  const lastUpdateTimeRef = useRef<number>(0);
+  const isCanvasRoute = pathname.startsWith('/canvas') || pathname.startsWith('/presentation');
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync WebSocket context with Canvas context
   useEffect(() => {
-    if (currentCanvas && setWebSocketCanvasState) {
-      setWebSocketCanvasState(currentCanvas);
-    }
-  }, [currentCanvas, setWebSocketCanvasState]);
+    // Cancel any pending sync operations when route changes
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    // Skip everything if not on canvas route
+    if (!isCanvasRoute || !currentCanvas || !setWebSocketCanvasState) return;
+    
+    // Throttle updates to max once per second
+    const now = Date.now();
+    if (now - lastUpdateTimeRef.current < 1000) return;
+    
+    // Use a delayed update to break potential update loops
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    
+    syncTimeoutRef.current = setTimeout(() => {
+      try {
+        lastUpdateTimeRef.current = Date.now();
+        setWebSocketCanvasState(currentCanvas);
+      } catch (err) {
+        console.error('Error syncing canvas state:', err);
+      }
+    }, 200);
+    
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
+    };
+  }, [
+    isCanvasRoute, 
+    currentCanvas?.id,
+    // Only depend on element count changes, not the full object
+    currentCanvas?.elements?.length,
+    setWebSocketCanvasState
+  ]);
 
   // SINGLE canvasState handler
   useEffect(() => {
-    if (!registerHandler) return;
+    if (!isCanvasRoute || !registerHandler || !setCurrentCanvas) return;
 
     const unregisterCanvasState = registerHandler('canvasState', (payload) => {
       console.log('Bridge received canvas state:', payload);
@@ -59,11 +102,11 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       unregisterCanvasState();
     };
-  }, [registerHandler, setCurrentCanvas]);
+  }, [registerHandler, setCurrentCanvas, pathname]);
 
   // SINGLE canvasUpdate handler
   useEffect(() => {
-    if (!registerHandler || !sendMessage) return;
+    if (!isCanvasRoute || !registerHandler || !sendMessage || !currentCanvas) return;
     
     const unregisterCanvasUpdate = registerHandler('canvasUpdate', (payload) => {
       // Enhanced logging to trace the update flow
@@ -237,7 +280,7 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       unregisterCanvasUpdate();
     };
-  }, [registerHandler, sendMessage, currentCanvas, setCurrentCanvas]);
+  }, [registerHandler, sendMessage, currentCanvas?.id, isCanvasRoute]);
 
   // Canvas audit logging
   useEffect(() => {

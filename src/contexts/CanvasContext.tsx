@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { pb } from '@/services/pocketbaseService';
 import { useWebSocket } from './WebSocketContext';
 import { toast } from 'sonner';
+import { convertImageUrlsToBase64 } from '@/lib/imageUtils';
 
 // Types remain unchanged
 
@@ -284,7 +285,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     try {
-      const canvasData = { ...currentCanvas };
+      // Convert blob URLs to base64
+      const canvasWithBase64Images = await convertImageUrlsToBase64(currentCanvas);
+      
+      const canvasData = { ...canvasWithBase64Images };
       const canvasSize = JSON.stringify(canvasData).length;
       
       // For non-admin users, check storage limit
@@ -322,7 +326,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isInfinite: canvasData.isInfinite,
       };
       
-      setCurrentCanvas(newCanvas);
+      setCurrentCanvas(canvasWithBase64Images);
       await loadUserCanvases();
       
       toast.success('Canvas saved to your account');
@@ -432,7 +436,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentCanvas || !pb.client.authStore.isValid) return false;
     
     try {
-      const canvasData = { ...currentCanvas };
+      const canvasWithBase64Images = await convertImageUrlsToBase64(currentCanvas);
+    
+      const canvasData = { ...canvasWithBase64Images };
       const canvasSize = JSON.stringify(canvasData).length;
       
       // For non-admin users, check storage limit
@@ -465,6 +471,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
         refreshUserData();
       }
+      setCurrentCanvas(canvasWithBase64Images);
       
       toast.success('Canvas saved successfully');
       return true;

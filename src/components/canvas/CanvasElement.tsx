@@ -145,13 +145,17 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   const handleResizeMove = (e: MouseEvent) => {
     const deltaX = e.clientX - resizeStartPos.x;
     const deltaY = e.clientY - resizeStartPos.y;
-
+  
     const newWidth = Math.max(100, originalDimensions.width + deltaX);
     const newHeight = Math.max(75, originalDimensions.height + deltaY);
-
+  
+    // CRITICAL FIX: Always include x/y coordinates with resize updates
+    // This prevents element from disappearing during resize operations
     onUpdateElement({
       width: newWidth,
-      height: newHeight
+      height: newHeight,
+      x: element.x,    // Include current position
+      y: element.y     // Include current position
     });
   };
 
