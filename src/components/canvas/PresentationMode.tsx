@@ -432,8 +432,7 @@ const PresentationMode: React.FC = () => {
   
   // Render the canvas view with transitions
   return (
-    <div className={`h-screen w-screen overflow-hidden ${bgColor} flex items-center justify-center relative`}>
-      {/* Top UI controls */}
+    <div className="h-screen w-screen overflow-hidden bg-gray-100 flex items-center justify-center relative canvas-theme-aware">      {/* Top UI controls */}
       <div className="absolute top-4 right-4 flex space-x-2 z-50">
         <Button 
           variant="outline" 

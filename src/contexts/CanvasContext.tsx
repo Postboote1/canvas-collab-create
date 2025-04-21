@@ -53,7 +53,7 @@ interface CanvasContextType {
   clearCanvas: () => void;
   exportAsImage: () => void;
   exportAsPDF: () => void;
-  exportCanvasData: () => string;
+  exportCanvasData: () => Promise<string>;
   importCanvasData: (data: string) => boolean;
   generateJoinCode: () => string;
   generateQRCode: (joinCode: string) => string;
@@ -622,7 +622,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  const exportCanvasData = (): string => {
+  const exportCanvasData = async (): Promise<string> => {
     if (!currentCanvas) {
       toast.error('No canvas to export', {
         position: 'bottom-center',
@@ -631,7 +631,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     try {
-      return JSON.stringify(currentCanvas);
+      // Convert all blob URLs to base64 before exporting
+      const canvasWithBase64Images = await convertImageUrlsToBase64(currentCanvas);
+      return JSON.stringify(canvasWithBase64Images);
     } catch (error) {
       console.error('Failed to export canvas data:', error);
       toast.error('Failed to export canvas data', {
@@ -653,69 +655,35 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return false;
       }
       
-      // If the user is logged in, save the imported canvas to their account
-      if (user) {
-        // Generate a new ID and join code to avoid conflicts
-        const importedCanvas: Canvas = {
-          ...canvas,
-          id: `canvas_${Date.now()}`,
-          joinCode: generateJoinCode(),
-          createdBy: user.id,
-          createdAt: new Date().toISOString()
-        };
-        
-        // If user has reached the limit, show an error
-        if (userCanvases.length >= 5) {
-          toast.error('You can only have up to 5 canvases. Please delete one first.', {
-            position: 'bottom-center',
-          });
-          return false;
-        }
-        
-        // Update user's canvases in localStorage
-        const usersStr = localStorage.getItem('canvasUsers') || '[]';
-        const users = JSON.parse(usersStr);
-        
-        const userIndex = users.findIndex((u: any) => u.id === user.id);
-        if (userIndex !== -1) {
-          if (!users[userIndex].canvases) {
-            users[userIndex].canvases = [];
-          }
-          users[userIndex].canvases.push(importedCanvas);
-          localStorage.setItem('canvasUsers', JSON.stringify(users));
-          
-          // Also add to global canvases
-          const allCanvases = getAllCanvases();
-          allCanvases.push(importedCanvas);
-          saveAllCanvases(allCanvases);
-          
-          // Update state
-          setUserCanvases([...userCanvases, importedCanvas]);
-          setCurrentCanvas(importedCanvas);
-          
-          toast.success('Canvas imported and saved to your account!', {
-            position: 'bottom-center',
-          });
-          return true;
-        }
-      } else {
-        // If user is not logged in, just load the canvas temporarily
-        // Also add to global canvases with original join code
-        const allCanvases = getAllCanvases();
-        allCanvases.push(canvas);
-        saveAllCanvases(allCanvases);
-        
-        setCurrentCanvas(canvas);
-        toast.success('Canvas imported (not saved to account)', {
-          position: 'bottom-center',
-        });
-        return true;
-      }
+      // Process all elements to ensure they have valid properties
+      const processedElements = canvas.elements.map(element => ({
+        ...element,
+        id: element.id || `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        x: typeof element.x === 'number' ? element.x : 0,
+        y: typeof element.y === 'number' ? element.y : 0
+      }));
       
-      return false;
+      // Create a new canvas object with the processed elements
+      const processedCanvas = {
+        ...canvas,
+        elements: processedElements,
+        id: `imported_${Date.now()}`, // Generate a new ID for the imported canvas
+        joinCode: generateJoinCode(), // Generate a new join code
+      };
+      
+      // Set as current canvas
+      setCurrentCanvas(processedCanvas);
+      
+      // Also add to global canvases
+      const allCanvases = getAllCanvases();
+      allCanvases.push(processedCanvas);
+      saveAllCanvases(allCanvases);
+      
+      toast.success('Canvas imported successfully');
+      return true;
     } catch (error) {
       console.error('Failed to import canvas data:', error);
-      toast.error('Failed to import canvas data', {
+      toast.error('Failed to import canvas: Invalid data format', {
         position: 'bottom-center',
       });
       return false;

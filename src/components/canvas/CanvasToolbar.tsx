@@ -61,7 +61,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   activeColor,
   setActiveColor
 }) => {
-  const { exportAsImage, exportAsPDF, exportCanvasData, importCanvasData, clearCanvas } = useCanvas();
+  const { exportAsImage, exportAsPDF, exportCanvasData, importCanvasData, clearCanvas, currentCanvas } = useCanvas();
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   
@@ -81,7 +81,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
@@ -90,11 +89,11 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       reader.onload = (event) => {
         if (typeof event.target?.result === 'string') {
           try {
-            const success = importCanvasData(event.target.result);
-            if (success) {
+            if (importCanvasData(event.target.result)) {
               toast.success('Canvas imported successfully');
             }
           } catch (error) {
+            console.error('Import error:', error);
             toast.error('Failed to import canvas: Invalid file format');
           }
         }
@@ -105,18 +104,17 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     input.click();
   };
   
-  const handleExportCanvas = () => {
-    const data = exportCanvasData();
+  const handleExportCanvas = async () => {
+    const data = await exportCanvasData();
     if (!data) return;
     
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'canvas_export.json';
+    link.download = `${currentCanvas?.name || 'canvas'}_export.json`;
     link.click();
     URL.revokeObjectURL(url);
-    
     toast.success('Canvas exported successfully');
   };
 
