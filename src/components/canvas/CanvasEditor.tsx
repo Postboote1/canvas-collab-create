@@ -767,19 +767,52 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       toast.error('Canvas content not ready for export');
       return;
     }
-
-    // Temporarily reset scale and position for accurate capture
+  
+    // Find the actual content bounds
+    const elements = currentCanvas?.elements || [];
+    if (elements.length === 0) {
+      toast.error('No content to export');
+      return;
+    }
+  
+    // Calculate the bounds of all elements
+    let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+    elements.forEach(el => {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + (el.width || 100));
+      maxY = Math.max(maxY, el.y + (el.height || 100));
+    });
+  
+    // Add padding
+    const padding = 50;
+    minX = Math.max(0, minX - padding);
+    minY = Math.max(0, minY - padding);
+    maxX = maxX + padding;
+    maxY = maxY + padding;
+  
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+  
+    // Store original view state
     const originalScale = scale;
     const originalPosition = { ...viewportPosition };
+    const originalSelection = selectedElement; // Store selected element
+    
+    // Set optimal view for capture and clear selection
     setScale(1);
-    setViewportPosition({ x: 0, y: 0 });
-
-    let timeoutId: number | undefined = undefined;
-
-    timeoutId = window.setTimeout(() => {
+    setViewportPosition({ x: minX, y: minY });
+    setSelectedElement(null); // Clear selection to hide UI controls
+  
+    // Wait for the view update to apply
+    setTimeout(() => {
       html2canvas(contentRef.current!, {
-        backgroundColor: null,
-        scale: window.devicePixelRatio,
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher resolution
+        x: minX,
+        y: minY,
+        width: contentWidth,
+        height: contentHeight,
         allowTaint: true,
         useCORS: true,
       }).then(canvas => {
@@ -789,19 +822,21 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         link.href = imgData;
         link.click();
         toast.success('Canvas exported as image');
+        
+        // Restore original view and selection
+        setScale(originalScale);
+        setViewportPosition(originalPosition);
+        setSelectedElement(originalSelection); // Restore selection
       }).catch(err => {
         console.error('Image export failed:', err);
         toast.error('Failed to export canvas as image');
-      }).finally(() => {
+        
+        // Restore original view and selection on error
         setScale(originalScale);
         setViewportPosition(originalPosition);
+        setSelectedElement(originalSelection); // Restore selection
       });
-    }, 100);
-
-    // Cleanup timeout if component unmounts before export
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
+    }, 200);
   };
 
   const handleExportAsPDF = () => {
@@ -809,43 +844,88 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       toast.error('Canvas content not ready for export');
       return;
     }
-
+  
+    // Find the actual content bounds instead of using the entire canvas
+    const elements = currentCanvas?.elements || [];
+    if (elements.length === 0) {
+      toast.error('No content to export');
+      return;
+    }
+  
+    // Calculate the bounds of all elements
+    let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+    elements.forEach(el => {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + (el.width || 100));
+      maxY = Math.max(maxY, el.y + (el.height || 100));
+    });
+  
+    // Add padding
+    const padding = 50;
+    minX = Math.max(0, minX - padding);
+    minY = Math.max(0, minY - padding);
+    maxX = maxX + padding;
+    maxY = maxY + padding;
+  
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+  
+    // Store original view state
     const originalScale = scale;
     const originalPosition = { ...viewportPosition };
+    const originalSelection = selectedElement; // Store selected element
+    
+    // Set optimal view for capture and clear selection
     setScale(1);
-    setViewportPosition({ x: 0, y: 0 });
-
-    let timeoutId: number | undefined = undefined;
-
-    timeoutId = window.setTimeout(() => {
+    setViewportPosition({ x: minX, y: minY });
+    setSelectedElement(null); // Clear selection to hide UI controls
+  
+    // Wait for the view update to apply
+    setTimeout(() => {
       html2canvas(contentRef.current!, {
         backgroundColor: '#ffffff',
-        scale: window.devicePixelRatio * 2,
+        scale: 2,
+        x: minX,
+        y: minY,
+        width: contentWidth,
+        height: contentHeight,
         allowTaint: true,
         useCORS: true,
       }).then(canvas => {
-        const imgData = canvas.toDataURL('image/png');
+        // Calculate PDF size - use A4 or fit to content
+        const pdfWidth = Math.min(595, contentWidth);
+        const pdfHeight = Math.min(842, contentHeight * (pdfWidth / contentWidth));
+        
         const pdf = new jsPDF({
-          orientation: canvas.width > canvas.height ? 'l' : 'p',
-          unit: 'px',
-          format: [canvas.width, canvas.height]
+          orientation: contentWidth > contentHeight ? 'landscape' : 'portrait',
+          unit: 'pt', 
+          format: [pdfWidth, pdfHeight]
         });
-        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+  
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
         pdf.save(`${currentCanvas?.name || 'canvas'}_export.pdf`);
         toast.success('Canvas exported as PDF');
+        
+        // Restore original view and selection
+        setScale(originalScale);
+        setViewportPosition(originalPosition);
+        setSelectedElement(originalSelection); // Restore selection
       }).catch(err => {
         console.error('PDF export failed:', err);
         toast.error('Failed to export canvas as PDF');
-      }).finally(() => {
+        
+        // Restore original view and selection on error
         setScale(originalScale);
         setViewportPosition(originalPosition);
+        setSelectedElement(originalSelection); // Restore selection
       });
-    }, 100);
-
-    // Cleanup timeout if component unmounts before export
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
+    }, 200);
   };
 
   // Expose export methods globally
