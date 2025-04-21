@@ -105,8 +105,14 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onUpdateElement({ content: e.target.value });
-
+    onUpdateElement({ 
+      content: e.target.value,
+      x: element.x,    // Preserve position
+      y: element.y,    // Preserve position
+      width: element.width,  // Preserve width
+      height: element.height // Preserve height
+    });
+  
     // Auto-resize textarea
     if (textAreaRef.current) {
       textAreaRef.current.style.height = 'auto';
@@ -119,7 +125,13 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const handleColorChange = (color: string) => {
-    onUpdateElement({ color: color });
+    onUpdateElement({ 
+      color: color,
+      x: element.x,    // Preserve position
+      y: element.y,    // Preserve position
+      width: element.width,  // Preserve width
+      height: element.height // Preserve height
+    });
     setShowColorPicker(false);
   };
 
