@@ -130,3 +130,32 @@ body, .bg-background, .bg-card, .bg-muted, .text-foreground,
               border-color var(--transition-duration) ease-in-out, 
               color var(--transition-duration) ease-in-out;
 }
+
+/* Add these rules to your CSS */
+.canvas-theme-aware {
+  /* Light mode is default */
+  background-color: var(--canvas-bg-light);
+  color: var(--canvas-text-light);
+}
+
+.canvas-theme-aware.dark {
+  background-color: var(--canvas-bg-dark);
+  color: var(--canvas-text-dark);
+}
+
+/* Canvas-specific dark mode overrides */
+.canvas-theme-aware.dark .bg-card {
+  background-color: hsl(var(--card));
+}
+
+.canvas-theme-aware.dark .text-primary-foreground {
+  color: hsl(var(--primary-foreground));
+}
+
+/* Define CSS variables for the canvas colors */
+:root {
+  --canvas-bg-light: #FFFFFF;
+  --canvas-text-light: #000000;
+  --canvas-bg-dark: hsl(222.2 84% 4.9%);
+  --canvas-text-dark: hsl(210 40% 98%);
+}

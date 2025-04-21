@@ -947,7 +947,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   }, []);
 
   return (
-    <div className="flex flex-col h-full dark:bg-zinc-800">
+    <div className="flex flex-col h-full canvas-theme-aware">
       <CanvasToolbar
         activeTool={activeTool}
         setActiveTool={setActiveTool}
@@ -970,7 +970,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       >
         <div
           ref={canvasRef}
-          className="absolute w-full h-full canvas-background dark:bg-zinc-900"
+          className="absolute w-full h-full canvas-background canvas-theme-aware"
           style={{
             width: '5000px', // Reduced from 100000px
             height: '5000px', // Reduced from 100000px
