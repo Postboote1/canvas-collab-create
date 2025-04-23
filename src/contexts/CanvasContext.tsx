@@ -47,7 +47,7 @@ interface CanvasContextType {
   loadCanvasByCode: (code: string) => Promise<boolean>;
   saveCanvas: () => Promise<boolean>;
   saveCurrentCanvasToAccount: () => Promise<boolean>;
-  addElement: (element: Omit<CanvasElement, 'id'>) => void;
+  addElement: (element: Omit<CanvasElement, 'id'>) => CanvasElement;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   clearCanvas: () => void;
@@ -68,6 +68,12 @@ const CANVAS_STORAGE_KEY = 'global_canvases';
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, refreshUserData } = useAuth();
   const webSocketContext = useWebSocket();
+  // Detect if we're on a mobile device
+  const isMobileDevice = useRef(
+    typeof window !== 'undefined' && 
+    (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+     (window.innerWidth <= 768))
+  );
 
   if (!webSocketContext) {
     console.error('WebSocketProvider is not initialized yet.');
@@ -83,6 +89,30 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     canvasRef.current = currentCanvas;
   }, [currentCanvas]);
+  
+  // Set up touch event optimizations
+  useEffect(() => {
+    // For mobile devices, add special event handler for preventing 
+    // unwanted browser behaviors during canvas editing
+    if (isMobileDevice.current) {
+      const preventDefaultForCanvas = (e: TouchEvent) => {
+        // Only prevent default if we're in the canvas - identify canvas by a class
+        if (e.target && 
+            ((e.target as HTMLElement).classList.contains('canvas-editor') || 
+             (e.target as HTMLElement).closest('.canvas-editor'))) {
+          e.preventDefault();
+        }
+      };
+      
+      document.addEventListener('touchmove', preventDefaultForCanvas, { passive: false });
+      document.addEventListener('touchstart', preventDefaultForCanvas, { passive: false });
+      
+      return () => {
+        document.removeEventListener('touchmove', preventDefaultForCanvas);
+        document.removeEventListener('touchstart', preventDefaultForCanvas);
+      };
+    }
+  }, []);
 
   // WebSocket message handling
   useEffect(() => {
@@ -518,10 +548,13 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [currentCanvas, loadUserCanvases, user, refreshUserData]);
 
   // Canvas operations with useCallback for stability
-  const addElement = useCallback((element: Omit<CanvasElement, 'id'>) => {
+  const addElement = useCallback((element: Omit<CanvasElement, 'id'>): CanvasElement => {
+    const isTouchCreated = element._source === 'touch';
+    const uniqueId = `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
     const newElement = {
       ...element,
-      id: `element_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      id: uniqueId
     };
     
     setCurrentCanvas(prev => prev ? { 
@@ -529,9 +562,35 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       elements: [...prev.elements, newElement] 
     } : prev);
     
+    // For touch-created elements, use a slight delay before sending to avoid duplicates
+    if (sendMessage) {
+      if (isTouchCreated) {
+        setTimeout(() => {
+          sendMessage({
+            type: 'canvasOperation',
+            payload: {
+              operation: 'add',
+              element: { 
+                ...newElement,
+                _timestamp: Date.now() // Add timestamp to ensure uniqueness
+              }
+            }
+          });
+        }, 50);
+      } else {
+        sendMessage({
+          type: 'canvasOperation',
+          payload: {
+            operation: 'add',
+            element: newElement
+          }
+        });
+      }
+    }
+    
     // Return the new element with its ID
     return newElement;
-  }, []);
+  }, [sendMessage]);
 
   const updateElement = useCallback((id: string, updates: Partial<CanvasElement>) => {
     setCurrentCanvas(prev => {

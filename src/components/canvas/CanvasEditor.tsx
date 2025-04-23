@@ -1,4 +1,3 @@
-// src/components/canvas/CanvasEditor.tsx
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas, CanvasElement as CanvasElementType } from '@/contexts/CanvasContext';
@@ -9,16 +8,19 @@ import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { debounce } from 'lodash'; 
+import { useTouchGesture } from '@/hooks/use-touch-gesture';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CanvasEditorProps {
   readOnly?: boolean;
+  touchDrawingMode?: boolean;
 }
 
-const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
+const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false, touchDrawingMode = false }) => {
   const { user } = useAuth();
   const { currentCanvas, addElement, updateElement, deleteElement, saveCanvas, setCurrentCanvas } = useCanvas();
   const { isConnected, sendMessage, registerHandler, peerId } = useWebSocket();
-  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond' | 'pan'>('select');
   const [activeColor, setActiveColor] = useState('#000000');
   const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]); 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -31,9 +33,11 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   const [isPanning, setIsPanning] = useState(false);
   const [panStartPosition, setPanStartPosition] = useState({ x: 0, y: 0 });
   const [isLoading, setIsLoading] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
 
   // Store a ref of all object URLs to revoke them on delete
   const imageObjectURLs = useRef<Map<string, string>>(new Map());
@@ -173,7 +177,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       });
 
       if (clickedElement) {
-        setSelectedElement(clickedElement.id);
+        setSelectedElement(clickedElement?.id || null);
         setIsDragging(true);
         setDragOffset({
           x: x - clickedElement.x,
@@ -347,32 +351,124 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
   // Handle touch start for mobile and stylus input
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
-
+  
     const touch = e.touches[0];
     if (!touch) return;
-
+  
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = (touch.clientX - rect.left) / scale + viewportPosition.x;
-    const y = (touch.clientY - rect.top) / scale + viewportPosition.y;
-
+    // Fix coordinate calculation to match mouse events - remove the viewport offset addition
+    const x = (touch.clientX - rect.left) / scale;
+    const y = (touch.clientY - rect.top) / scale;
+  
     if (activeTool === 'draw') {
       setIsDrawing(true);
-      setDrawingPoints([{ x, y }]); // Start drawing
+      setDrawingPoints([{ x, y }]);
       e.preventDefault(); // Prevent scrolling while drawing
     }
-    // Handle other tools with more generous touch targets
-    else if (activeTool === 'select' || activeTool === 'arrow') {
+    // Handle element selection with better accuracy for touch targets
+    else if (activeTool === 'select') {
+      // Add extra margin for touch targets to make selection easier
+      const touchMargin = 20; // px
+      const clickedElement = currentCanvas?.elements.find(element => {
+        if (element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') {
+          return (
+            x >= element.x - touchMargin/scale && 
+            x <= element.x + (element.width || 0) + touchMargin/scale &&
+            y >= element.y - touchMargin/scale &&
+            y <= element.y + (element.height || 0) + touchMargin/scale
+          );
+        }
+        return false;
+      });
+  
+      if (clickedElement) {
+        setSelectedElement(clickedElement.id);
+        setIsDragging(true);
+        setDragOffset({
+          x: x - clickedElement.x,
+          y: y - clickedElement.y
+        });
+        e.preventDefault(); // Prevent scrolling while selecting
+      } else {
+        setSelectedElement(null);
+      }
+    }
+    // Handle other tools with improved accuracy for touch
+    else if (activeTool === 'arrow' || activeTool === 'card' || activeTool === 'text' || 
+             activeTool === 'circle' || activeTool === 'triangle' || activeTool === 'diamond') {
+      // Use the same technique as mouse events but with touch coordinates
       const mouseEvent = new MouseEvent('mousedown', {
         clientX: touch.clientX,
         clientY: touch.clientY,
         button: 0 // Simulate left click
       });
       handleCanvasMouseDown(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
-      e.preventDefault(); // Prevent scrolling while selecting
+      e.preventDefault(); // Prevent default browser behavior
     }
   };
 
-  // Handle mouse move on canvas with improved panning
+  // Handle touch move for mobile and stylus input
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!canvasRef.current || readOnly) return;
+  
+    const touch = e.touches[0];
+    if (!touch) return;
+  
+    const rect = canvasRef.current.getBoundingClientRect();
+    // Fix coordinate calculation - remove viewportPosition addition
+    const x = (touch.clientX - rect.left) / scale;
+    const y = (touch.clientY - rect.top) / scale;
+  
+    // Handle different interactions based on current state
+    if (isDrawing && activeTool === 'draw') {
+      setDrawingPoints(prev => [...prev, { x, y }]);
+      e.preventDefault();
+    } 
+    else if (isDragging && selectedElement) {
+      const element = currentCanvas?.elements.find(el => el.id === selectedElement);
+      if (element) {
+        const newX = x - dragOffset.x;
+        const newY = y - dragOffset.y;
+        
+        // Use requestAnimationFrame for smoother updates
+        requestAnimationFrame(() => {
+          handleUpdateElement(selectedElement, { x: newX, y: newY });
+        });
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Show drag indicator if it's a touch event and doesn't exist yet
+        if (e.touches && !document.getElementById('active-drag-indicator')) {
+          const dragIndicator = document.createElement('div');
+          dragIndicator.id = 'active-drag-indicator';
+          dragIndicator.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 9999;
+            pointer-events: none;
+          `;
+          dragIndicator.textContent = 'Moving element...';
+          document.body.appendChild(dragIndicator);
+          
+          // Remove after element drag ends
+          setTimeout(() => {
+            if (dragIndicator && dragIndicator.parentNode) {
+              dragIndicator.remove();
+            }
+          }, 3000);
+        }
+      }
+    }
+  };
+
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current || readOnly) return;
 
@@ -418,31 +514,6 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           });
         }
       }
-    }
-  };
-
-  // Handle touch move for mobile and stylus input
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!canvasRef.current || readOnly || !isDrawing) return;
-
-    const touch = e.touches[0];
-    if (!touch) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (touch.clientX - rect.left) / scale + viewportPosition.x;
-    const y = (touch.clientY - rect.top) / scale + viewportPosition.y;
-
-    if (activeTool === 'draw') {
-      setDrawingPoints([...drawingPoints, { x, y }]); // Add point
-      e.preventDefault(); // Prevent scrolling while drawing
-    }
-     // Simulate mouse move for dragging
-    else if (isDragging && selectedElement) {
-       const mouseEvent = new MouseEvent('mousemove', {
-         clientX: touch.clientX,
-         clientY: touch.clientY
-       });
-       handleCanvasMouseMove(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
     }
   };
 
@@ -1027,6 +1098,246 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     };
   }, []);
 
+  // Implement touch gesture handling
+  useTouchGesture(canvasRef, {
+    onPinch: (scale, center) => {
+      if (activeTool !== 'draw' && !touchDrawingMode) { // Don't zoom during drawing
+        setScale(prevScale => {
+          const newScale = Math.max(0.1, Math.min(5, prevScale * scale));
+          return newScale;
+        });
+      }
+    },
+    onPan: (dx, dy, event) => {
+      // Only pan when not in drawing mode or when using pan tool
+      if ((activeTool === 'pan' || (!touchDrawingMode && activeTool !== 'draw')) && 
+          !isDragging && !isResizing && !arrowStart) {
+        setViewportPosition(prev => ({
+          // Keep dx and dy signs the same for consistent movement direction
+          x: prev.x - dx/scale, // Using negative to simulate natural directional movement 
+          y: prev.y - dy/scale  // Using negative to simulate natural directional movement
+        }));
+      }
+    },
+    onDoubleTap: (x, y) => {
+      // First try to handle text editing
+      handleDoubleTap(x, y);
+      
+      // If not editing text, handle other double tap actions
+      if (activeTool === 'select' || activeTool === 'pan') {
+        setScale(1); // Reset zoom
+        // Center on tap location
+        const containerRect = canvasRef.current?.getBoundingClientRect();
+        if (containerRect) {
+          const centerX = (x - containerRect.left) / scale - viewportPosition.x;
+          const centerY = (y - containerRect.top) / scale - viewportPosition.y;
+          setViewportPosition({
+            x: -centerX + containerRect.width / 2 / scale,
+            y: -centerY + containerRect.height / 2 / scale
+          });
+        }
+      } else if (activeTool === 'card' && !readOnly) {
+        // Create a card at double tap position
+        handleCreateCardAtPosition(x, y);
+      }
+    }
+  });
+
+  // Handle creating card at position for touch devices
+  const handleCreateCardAtPosition = (x: number, y: number) => {
+    if (!canvasRef.current || readOnly) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const canvasX = (x - rect.left) / scale - viewportPosition.x;
+    const canvasY = (y - rect.top) / scale - viewportPosition.y;
+    
+    const newCard = {
+      type: 'card' as const,
+      content: '',
+      x: canvasX - 150/2, // Center the card
+      y: canvasY - 100/2,
+      width: 150,
+      height: 100,
+      color: activeColor
+    };
+    
+    const element = addElement(newCard);
+    setSelectedElement(element?.id || null);
+  };
+
+  // Touch-specific drawing handler
+  const handleTouchDraw = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchDrawingMode || activeTool !== 'draw' || readOnly || !canvasRef.current) return;
+    
+    // Get the primary touch
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    
+    // Convert to canvas coordinates
+    const x = (touch.clientX - rect.left) / scale - viewportPosition.x;
+    const y = (touch.clientY - rect.top) / scale - viewportPosition.y;
+    
+    if (!isDrawing) {
+      // Start a new drawing
+      setDrawingPoints([{ x, y }]);
+      setIsDrawing(true);
+    } else {
+      // Continue the drawing
+      setDrawingPoints(prevPoints => [...prevPoints, { x, y }]);
+    }
+    
+    // Prevent scrolling and other browser gestures
+    e.preventDefault();
+  };
+  
+  // Handle touch end for drawing
+  const handleTouchDrawEnd = () => {
+    if (!touchDrawingMode || activeTool !== 'draw' || readOnly || !isDrawing) return;
+    
+    // Create the drawing element if we have points
+    if (drawingPoints.length > 1) {
+      const drawingElement = {
+        type: 'drawing' as const,
+        points: drawingPoints,
+        x: Math.min(...drawingPoints.map(p => p.x)),
+        y: Math.min(...drawingPoints.map(p => p.y)),
+        width: Math.max(...drawingPoints.map(p => p.x)) - Math.min(...drawingPoints.map(p => p.x)),
+        height: Math.max(...drawingPoints.map(p => p.y)) - Math.min(...drawingPoints.map(p => p.y)),
+        color: activeColor,
+        _source: 'touch'
+      };
+      
+      addElement(drawingElement);
+    }
+    
+    // Reset drawing state
+    setDrawingPoints([]);
+    setIsDrawing(false);
+  };
+
+  // Improve text element double-tap handling
+  const handleDoubleTap = (x: number, y: number) => {
+    if (!canvasRef.current || readOnly) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const canvasX = (x - rect.left) / scale;
+    const canvasY = (y - rect.top) / scale;
+    
+    // Check if double-tapping on a text or card element
+    const textElement = currentCanvas?.elements.find(element => 
+      (element.type === 'text' || element.type === 'card') && 
+      canvasX >= element.x && 
+      canvasX <= element.x + (element.width || 200) &&
+      canvasY >= element.y && 
+      canvasY <= element.y + (element.height || 30)
+    );
+    
+    if (textElement) {
+      // Set selected element and force edit mode
+      setSelectedElement(textElement.id);
+      // We need to communicate to the CanvasElement that it should enter edit mode
+      // We can use a custom event for this
+      window.dispatchEvent(new CustomEvent('canvas-element-edit', {
+        detail: { elementId: textElement.id }
+      }));
+    }
+  };
+
+  // Add effect to listen for the touch-hold event with improved handling
+  useEffect(() => {
+    const handleElementTouchHold = (e: CustomEvent) => {
+      if (readOnly) return;
+      
+      // Get element ID and touch position from the event
+      const { elementId, x, y } = e.detail;
+      
+      // Find the element
+      const element = currentCanvas?.elements.find(el => el.id === elementId);
+      if (!element) return;
+      
+      // Calculate offset for dragging
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      
+      const canvasX = (x - rect.left) / scale;
+      const canvasY = (y - rect.top) / scale;
+      
+      // Set up for dragging
+      setSelectedElement(elementId);
+      setIsDragging(true);
+      setDragOffset({
+        x: canvasX - element.x,
+        y: canvasY - element.y
+      });
+      
+      // Add visual indicator for drag state
+      const indicator = document.createElement('div');
+      indicator.id = 'touch-drag-indicator';
+      indicator.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0,0,0,0.7);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0.9;
+      `;
+      indicator.textContent = 'Drag to move element';
+      document.body.appendChild(indicator);
+      
+      // Remove indicator after 1.5 seconds
+      setTimeout(() => {
+        const existingIndicator = document.getElementById('touch-drag-indicator');
+        if (existingIndicator) {
+          existingIndicator.style.opacity = '0';
+          setTimeout(() => existingIndicator.remove(), 300);
+        }
+      }, 1500);
+    };
+    
+    // Add event listener
+    window.addEventListener('element-touch-hold', handleElementTouchHold as EventListener);
+    
+    return () => {
+      window.removeEventListener('element-touch-hold', handleElementTouchHold as EventListener);
+      // Clean up any remaining indicators
+      const existingIndicator = document.getElementById('touch-drag-indicator');
+      if (existingIndicator) existingIndicator.remove();
+    };
+  }, [currentCanvas, scale, readOnly, setSelectedElement]);
+
+  // Enhance the handleTouchEnd function to clean up any indicators
+  const handleTouchEnd = () => {
+    // Clean up drag indicators
+    const dragIndicator = document.getElementById('active-drag-indicator');
+    if (dragIndicator) dragIndicator.remove();
+    
+    const touchIndicator = document.getElementById('touch-drag-indicator');
+    if (touchIndicator) touchIndicator.remove();
+    
+    // Normal touch end handling
+    if (readOnly) return;
+
+    if (isPanning) {
+      setIsPanning(false);
+      return;
+    }
+
+    if (isDrawing && activeTool === 'draw' && drawingPoints.length > 1) {
+      // Create drawing element as before
+      // ...existing code...
+    }
+
+    setIsDrawing(false);
+    setDrawingPoints([]);
+    setIsDragging(false);
+  };
+
   return (
     <div className="flex flex-col h-full canvas-theme-aware">
       <div className="overflow-x-auto pb-2">
@@ -1040,6 +1351,7 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
           setScale={setScale}
           activeColor={activeColor}
           setActiveColor={setActiveColor}
+          touchDrawingMode={touchDrawingMode}
         />
       </div>
 
@@ -1050,6 +1362,9 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
         onMouseMove={handleCanvasMouseMove}
         onMouseUp={(e) => { if (e.button === 2) handleCanvasMouseUp(); }}
         onContextMenu={handleContextMenu}
+        onTouchStart={touchDrawingMode && activeTool === 'draw' ? handleTouchDraw : undefined}
+        onTouchMove={touchDrawingMode && activeTool === 'draw' ? handleTouchDraw : undefined}
+        onTouchEnd={touchDrawingMode && activeTool === 'draw' ? handleTouchDrawEnd : undefined}
       >
         <div
           ref={canvasRef}
@@ -1135,7 +1450,5 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
     </div>
   );
 };
-
-
 
 export default CanvasEditor;

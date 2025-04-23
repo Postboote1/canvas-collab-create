@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useCanvas, CanvasElement } from '@/contexts/CanvasContext';
 import { Button } from '@/components/ui/button';
@@ -102,6 +101,17 @@ const PresentationMode: React.FC = () => {
         // Make leftward angles smaller than rightward angles
         if (dx < 0) { // If arrow points left
           angle = angle - 360; // Make leftward angles smaller
+        }
+        
+        // Add touch detection to improve user experience on mobile
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (isTouchDevice) {
+          // For touch devices, we want to favor vertical movement less
+          // This makes it easier to navigate presentations on mobile
+          if (Math.abs(dx) > Math.abs(dy) * 0.8) {
+            // More horizontal - prioritize even more for touch
+            angle = angle * 0.7; // Reduce the overall angle to prioritize horizontal
+          }
         }
         
         // Add to outgoingArrows map

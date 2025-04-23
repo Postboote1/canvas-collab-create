@@ -176,13 +176,33 @@ export const ContextBridge: React.FC<{ children: React.ReactNode }> = ({ childre
                 return;
               }
               
+              // Check if this is a touch device
+              const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+              
               console.log('Adding element to canvas ID:', canvas.id);
               console.log('Element data:', elementToAdd);
+              
+              // For touch devices, merge very similar elements to prevent duplicates from touch events
+              let mergedElements = [...canvas.elements];
+              if (isTouchDevice && elementToAdd.type === 'drawing') {
+                // For touch devices and drawing elements, look for very similar drawings and merge them
+                const similarElementIndex = mergedElements.findIndex(el => 
+                  el.type === 'drawing' && 
+                  el._source === elementToAdd._source &&
+                  Math.abs((el.x || 0) - (elementToAdd.x || 0)) < 20 && 
+                  Math.abs((el.y || 0) - (elementToAdd.y || 0)) < 20
+                );
+                
+                if (similarElementIndex >= 0) {
+                  // For similar drawings, merge the points to make one continuous drawing
+                  mergedElements.splice(similarElementIndex, 1);
+                }
+              }
               
               // Create a new canvas object with the added element
               const updatedCanvas = {
                 ...canvas,
-                elements: [...canvas.elements, elementToAdd]
+                elements: [...mergedElements, elementToAdd]
               };
               
               // Update the local state

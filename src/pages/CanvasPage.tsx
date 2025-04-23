@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Play, Save } from 'lucide-react';
+import { Play, Save, Hand, Fingerprint } from 'lucide-react'; // Replace Touch with Fingerprint
 import CanvasEditor from '@/components/canvas/CanvasEditor';
 import CanvasShare from '@/components/canvas/CanvasShare';
 import { useCanvas } from '@/contexts/CanvasContext';
@@ -11,6 +11,7 @@ import { Helmet } from 'react-helmet';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTouchGesture } from '@/hooks/use-touch-gesture';
 
 const CanvasPage: React.FC = () => {
   const { currentCanvas, saveCurrentCanvasToAccount, setCurrentCanvas } = useCanvas();
@@ -23,6 +24,85 @@ const CanvasPage: React.FC = () => {
   // Move these state hooks to the top level of the component
   const [loadAttempts, setLoadAttempts] = useState(0);
   const [lastLoadedCanvasId, setLastLoadedCanvasId] = useState<string | null>(null);
+  const [touchDrawingMode, setTouchDrawingMode] = useState(false);
+  
+  // Refs for touch gesture handling
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const canvasScale = useRef(1);
+  const canvasPosition = useRef({ x: 0, y: 0 });
+  
+  // Detect if we're using a touch device
+  const isTouchDevice = typeof window !== 'undefined' && 
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  
+  // Implement touch gestures for the canvas
+  useTouchGesture(canvasContainerRef, {
+    onPinch: (scale, center) => {
+      // Update scale through the global canvas interface
+      if (typeof window !== 'undefined' && window.__canvasInterface) {
+        window.__canvasInterface.setScale(canvasScale.current * scale);
+      }
+    },
+    onPan: (dx, dy, event) => {
+      // Pan the canvas if we're not in drawing mode, otherwise let the drawing happen
+      if (!touchDrawingMode && typeof window !== 'undefined' && window.__canvasInterface) {
+        // If we have 2 or more touches, let the pinch zoom handle it
+        if (event.touches.length >= 2) return;
+        
+        window.__canvasInterface.pan(dx, dy);
+        canvasPosition.current = { 
+          x: canvasPosition.current.x + dx, 
+          y: canvasPosition.current.y + dy 
+        };
+      }
+    },
+    onDoubleTap: (x, y) => {
+      // Double tap to zoom in
+      if (typeof window !== 'undefined' && window.__canvasInterface) {
+        // Calculate target scale (toggle between 1 and 2)
+        const targetScale = canvasScale.current === 1 ? 2 : 1;
+        window.__canvasInterface.setScale(targetScale);
+        canvasScale.current = targetScale;
+      }
+    },
+    onLongPress: (x, y) => {
+      // Long press to enter selection mode
+      if (!touchDrawingMode && typeof window !== 'undefined' && window.__canvasInterface) {
+        window.__canvasInterface.setActiveTool('select');
+        toast.success('Selection mode activated', { id: 'selection-mode' });
+      }
+    }
+  });
+  
+  // Hook into canvas scale changes
+  useEffect(() => {
+    // Create a global hook for other components to interact with canvas
+    if (typeof window !== 'undefined') {
+      window.__canvasInterface = {
+        setScale: (scale: number) => {
+          // Handle scale changes from gesture controller
+          canvasScale.current = scale;
+          // Dispatch a custom event that the canvas editor can listen to
+          window.dispatchEvent(new CustomEvent('canvas-scale', { detail: { scale } }));
+        },
+        pan: (dx: number, dy: number) => {
+          // Handle pan changes from gesture controller
+          window.dispatchEvent(new CustomEvent('canvas-pan', { detail: { dx, dy } }));
+        },
+        setActiveTool: (tool: string) => {
+          // Handle tool changes from gesture controller
+          window.dispatchEvent(new CustomEvent('canvas-tool', { detail: { tool } }));
+        }
+      };
+    }
+    
+    return () => {
+      // Clean up the global interface
+      if (typeof window !== 'undefined') {
+        delete window.__canvasInterface;
+      }
+    };
+  }, []);
   
   // Redirect if no canvas is loaded
   useEffect(() => {
@@ -52,7 +132,7 @@ const CanvasPage: React.FC = () => {
   }, [setCurrentCanvas]);
 
   useEffect(() => {
-    const handleForceRefresh = (event) => {
+    const handleForceRefresh = (event: any) => {
       console.log("Force refresh event received:", event.detail);
       try {
         // Wait a brief moment to ensure all operations are complete
@@ -91,7 +171,6 @@ const CanvasPage: React.FC = () => {
         
         if (pendingCanvasState) {
           const canvasData = JSON.parse(pendingCanvasState);
-          //console.log('Loading pending canvas state:', canvasData);
           
           // Modified logic: Only load if it's clearly the same canvas with updates
           // or if we have no canvas yet
@@ -101,7 +180,6 @@ const CanvasPage: React.FC = () => {
              canvasData.elements && canvasData.elements.length >= (currentCanvas.elements?.length || 0));
           
           if (shouldLoadPending) {
-            //console.log('Setting canvas from pending state, elements count:', canvasData.elements.length);
             setCurrentCanvas(canvasData);
             setLastLoadedCanvasId(canvasData.id);
             
@@ -164,7 +242,7 @@ const CanvasPage: React.FC = () => {
         <title>{currentCanvas.name} - Canvas Collaboration</title>
       </Helmet>
       
-      <div className="h-screen flex flex-col dark:bg-zinc-900">
+      <div className="h-screen flex flex-col dark:bg-zinc-900" ref={canvasContainerRef}>
         <div className="bg-card border-b py-2 px-2 md:px-4 flex items-center justify-between dark:border-zinc-700">
           <div className="flex items-center gap-2">
             <h1 className="font-medium text-sm md:text-base truncate max-w-[150px] md:max-w-xs">
@@ -199,6 +277,23 @@ const CanvasPage: React.FC = () => {
               {!isMobile && "Present"}
             </Button>
             
+            {/* Touch mode toggle for mobile */}
+            {isTouchDevice && (
+              <Button
+                variant={touchDrawingMode ? "default" : "outline"}
+                size={isMobile ? "sm" : "default"}
+                className={`flex items-center gap-1 text-xs md:text-sm ${
+                  touchDrawingMode 
+                    ? 'bg-green-500 text-white hover:bg-green-600' 
+                    : 'bg-gray-500 text-white hover:bg-gray-600'
+                }`}
+                onClick={() => setTouchDrawingMode(!touchDrawingMode)}
+              >
+                {touchDrawingMode ? <Fingerprint size={isMobile ? 14 : 16} /> : <Hand size={isMobile ? 14 : 16} />}
+                {!isMobile && (touchDrawingMode ? "Draw" : "Pan")}
+              </Button>
+            )}
+            
             <CanvasShare />
             
             <Button
@@ -207,13 +302,23 @@ const CanvasPage: React.FC = () => {
               className="bg-gray-700 text-white hover:bg-gray-800 text-xs md:text-sm"
               onClick={() => navigate('/')}
             >
-              {isMobile ? "Exit" : "Back to Home"}
+              {isMobile ? "Exit" : "Exit"}
             </Button>
           </div>
         </div>
         
-        <div className="flex-1 overflow-hidden">
-          <CanvasEditor readOnly={isReadOnly} />
+        <div className="flex-1 overflow-hidden canvas-editor-container">
+          <CanvasEditor 
+            readOnly={isReadOnly} 
+            touchDrawingMode={touchDrawingMode}
+          />
+          
+          {/* Touch drawing mode indicator */}
+          {isTouchDevice && touchDrawingMode && (
+            <div className="touch-draw-mode">
+              Touch Drawing Mode
+            </div>
+          )}
         </div>
       </div>
     </ThemeProvider>

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Palette, Maximize, Trash } from 'lucide-react';
+import { Palette, Maximize, Trash, Pencil } from 'lucide-react';
 
 interface CanvasElementProps {
   element: ICanvasElement;
@@ -36,6 +36,18 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Add state and refs for touch-and-hold behavior
+  const [touchHoldTimer, setTouchHoldTimer] = useState<NodeJS.Timeout | null>(null);
+  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+  const isTouchMoving = useRef(false);
+  const touchMoveCount = useRef(0);
+
+  // Add a variable for activeColor to track selected color in the picker
+  const [activeColor, setActiveColor] = useState(element.color || '#FFFFFF');
+
+  // Add a state variable to track which picker is being shown
+  const [pickerSource, setPickerSource] = useState<'toolbar' | 'contextmenu' | null>(null);
 
   // Calculate minimum heights for cards based on content
   useEffect(() => {
@@ -98,6 +110,27 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     };
   }, [element.id, element.type, element.imageUrl]);
 
+  // Add a listener for the edit event we'll dispatch
+  useEffect(() => {
+    const handleEditEvent = (e: CustomEvent) => {
+      if (e.detail.elementId === element.id && (element.type === 'text' || element.type === 'card')) {
+        setIsEditing(true);
+        // Focus the textarea after a short delay to ensure it's rendered
+        setTimeout(() => {
+          if (textAreaRef.current) {
+            textAreaRef.current.focus();
+          }
+        }, 50);
+      }
+    };
+
+    window.addEventListener('canvas-element-edit', handleEditEvent as EventListener);
+    
+    return () => {
+      window.removeEventListener('canvas-element-edit', handleEditEvent as EventListener);
+    };
+  }, [element.id, element.type]);
+
   const handleDoubleClick = () => {
     if (!readOnly && (element.type === 'card' || element.type === 'text')) {
       setIsEditing(true);
@@ -125,6 +158,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
   };
 
   const handleColorChange = (color: string) => {
+    setActiveColor(color); // Update the active color in state
     onUpdateElement({ 
       color: color,
       x: element.x,    // Preserve position
@@ -133,6 +167,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
       height: element.height // Preserve height
     });
     setShowColorPicker(false);
+    setPickerSource(null);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -181,6 +216,84 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     }
   };
 
+  // Improve touch handling for elements
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (readOnly) return;
+    
+    // Prevent default to avoid unwanted scrolling or zooming
+    e.stopPropagation();
+    
+    // Set this element as selected when touched
+    onSelectElement(element.id);
+    
+    // Store touch position for later use
+    const touch = e.touches[0];
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    touchMoveCount.current = 0;
+    isTouchMoving.current = false;
+    
+    // Set up touch hold timer for move gesture (500ms)
+    if (touchHoldTimer) clearTimeout(touchHoldTimer);
+    
+    const timer = setTimeout(() => {
+      // If user hasn't moved much during the hold time, enter drag mode
+      if (!isTouchMoving.current && touchMoveCount.current < 5) {
+        // Dispatch custom event to enter drag mode
+        window.dispatchEvent(new CustomEvent('element-touch-hold', {
+          detail: { 
+            elementId: element.id,
+            x: touch.clientX,
+            y: touch.clientY
+          }
+        }));
+        
+        // Visual feedback that element is movable
+        if (elementRef.current) {
+          elementRef.current.style.transition = 'transform 0.2s ease';
+          elementRef.current.style.transform = 'scale(1.05)';
+          
+          // Reset after animation
+          setTimeout(() => {
+            if (elementRef.current) {
+              elementRef.current.style.transition = '';
+              elementRef.current.style.transform = '';
+            }
+          }, 300);
+        }
+      }
+    }, 500); // 500ms hold time
+    
+    setTouchHoldTimer(timer);
+  };
+
+  // Track touch movement to detect if user is scrolling vs holding
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (readOnly || !touchStartPos.current) return;
+    
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartPos.current.x;
+    const dy = touch.clientY - touchStartPos.current.y;
+    
+    // If moved more than 10px in any direction, consider it a move rather than a hold
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      isTouchMoving.current = true;
+    }
+    
+    touchMoveCount.current++;
+  };
+
+  // Clean up touch handling
+  const handleTouchEnd = () => {
+    if (touchHoldTimer) {
+      clearTimeout(touchHoldTimer);
+      setTouchHoldTimer(null);
+    }
+    
+    touchStartPos.current = null;
+    isTouchMoving.current = false;
+    touchMoveCount.current = 0;
+  };
+
   const renderResizeHandle = () => {
     if (!selected || readOnly || element.type === 'text' || element.type === 'drawing' || element.type === 'arrow') {
       return null;
@@ -207,58 +320,74 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     );
   };
 
+  // Fix toolbar positioning to prevent it from being cut off
   const renderControlsMenu = () => {
     if (!selected || readOnly) {
       return null;
     }
 
+    // Determine if we should position the toolbar above or below based on element position
+    const isMobile = window.innerWidth <= 768;
+    const isNearTop = element.y < 100; // Check if element is near the top of the viewport
+    
     return (
-      <div className="absolute -top-8 right-0 flex items-center gap-1 bg-background/80 backdrop-blur-sm border rounded p-1 shadow-md z-20">
+      <div 
+        className={`absolute ${isNearTop ? 'top-full mt-2' : '-top-12'} right-0 flex items-center gap-1 bg-background/90 backdrop-blur-sm border rounded p-1 shadow-md z-20`}
+        style={{
+          maxWidth: isMobile ? '100%' : 'auto',
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+        }}
+      >
+        {/* Fix color picker to ensure it renders properly */}
         {element.type !== 'drawing' && (
-          <Popover open={showColorPicker} onOpenChange={setShowColorPicker}>
+          <Popover 
+            open={showColorPicker && pickerSource === 'toolbar'} 
+            onOpenChange={(open) => {
+              if (open) {
+                setShowColorPicker(true);
+                setPickerSource('toolbar');
+              } else if (pickerSource === 'toolbar') {
+                setShowColorPicker(false);
+                setPickerSource(null);
+              }
+            }}
+          >
             <PopoverTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0">
-                <Palette size={14} />
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-8 w-8 rounded-full p-0"
+                onClick={() => {
+                  setShowColorPicker(!showColorPicker || pickerSource !== 'toolbar');
+                  setPickerSource(showColorPicker && pickerSource === 'toolbar' ? null : 'toolbar');
+                }}
+              >
+                <Palette size={16} />
                 <span className="sr-only">Change color</span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-3">
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium">Color</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {['#FFFFFF', '#F87171', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#000000'].map(color => (
-                    <div
-                      key={color}
-                      className={`w-6 h-6 rounded cursor-pointer border ${element.color === color ? 'ring-2 ring-blue-500' : 'border-gray-300'}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => handleColorChange(color)}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2">
-                  <input
-                    type="color"
-                    value={element.color || '#FFFFFF'}
-                    onChange={(e) => handleColorChange(e.target.value)}
-                    className="w-full h-6"
-                  />
-                </div>
-              </div>
+            <PopoverContent 
+              className="w-auto p-0" 
+              onInteractOutside={(e) => e.preventDefault()} // Prevent outside clicks from closing
+              onEscapeKeyDown={(e) => e.preventDefault()} // Prevent ESC from closing
+            >
+              {renderColorPicker('toolbar')}
             </PopoverContent>
           </Popover>
         )}
 
-        {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
-          <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0" onClick={handleResizeStart}>
-            <Maximize size={14} />
-            <span className="sr-only">Resize</span>
-          </Button>
-        )}
-
-        <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full p-0 text-destructive" onClick={handleDelete}>
-          <Trash size={14} />
+        <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full p-0 text-destructive" onClick={handleDelete}>
+          <Trash size={16} />
           <span className="sr-only">Delete</span>
         </Button>
+        
+        {/* Add edit button for text and card elements */}
+        {(element.type === 'text' || element.type === 'card') && (
+          <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full p-0" onClick={() => setIsEditing(true)}>
+            <Pencil size={16} />
+            <span className="sr-only">Edit</span>
+          </Button>
+        )}
       </div>
     );
   };
@@ -302,7 +431,7 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
     let shortestDistance = Math.hypot(shortestPath.to.x - shortestPath.from.x, shortestPath.to.y - shortestPath.from.y);
 
     for (let i = 1; i < possiblePaths.length; i++) {
-      const distance = Math.hypot(possiblePaths[i].to.x - possiblePaths[i].from.x, possiblePaths[i].to.y - possiblePaths[i].from.y);
+      const distance = Math.hypot(possiblePaths[i].to.x - possiblePaths[i].from.x, possiblePaths[i].from.y - possiblePaths[i].to.y);
       if (distance < shortestDistance) {
         shortestDistance = distance;
         shortestPath = possiblePaths[i];
@@ -327,12 +456,41 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
         <ContextMenuTrigger asChild>
           {children}
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
+        <ContextMenuContent className="w-auto">
           {(element.type === 'card' || element.type === 'text' || element.type === 'image' || element.type === 'shape') && (
             <>
-              <ContextMenuItem onClick={() => setShowColorPicker(true)}>
-                Change Color
-              </ContextMenuItem>
+              <Popover 
+                open={showColorPicker && pickerSource === 'contextmenu'} 
+                onOpenChange={(open) => {
+                  if (open) {
+                    setShowColorPicker(true);
+                    setPickerSource('contextmenu');
+                  } else if (pickerSource === 'contextmenu') {
+                    // Only close if we're the active picker
+                    setShowColorPicker(false);
+                    setPickerSource(null);
+                  }
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <ContextMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setShowColorPicker(true);
+                      setPickerSource('contextmenu');
+                    }}
+                  >
+                    Change Color
+                  </ContextMenuItem>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 mt-1" onInteractOutside={(e) => {
+                  // Prevent outside clicks from closing the popover
+                  e.preventDefault();
+                }}>
+                  {renderColorPicker('contextmenu')}
+                </PopoverContent>
+              </Popover>
+              
               {(element.type === 'card' || element.type === 'image' || element.type === 'shape') && (
                 <ContextMenuItem onClick={handleResizeStart}>
                   Resize
@@ -345,6 +503,52 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+    );
+  };
+
+  const renderColorPicker = (source: 'toolbar' | 'contextmenu') => {
+    return (
+      <div 
+        className="p-3 bg-background border rounded shadow-md w-48"
+        onClick={(e) => e.stopPropagation()} // Stop click from closing the popover
+        onMouseMove={(e) => e.stopPropagation()} // Prevent mouse move from closing popover
+      >
+        <p className="text-sm font-medium mb-2">Choose Color</p>
+        <div className="grid grid-cols-4 gap-2 mb-2">
+          {['#FFFFFF', '#F87171', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6', '#000000'].map(color => (
+            <div
+              key={color}
+              className={`w-8 h-8 rounded cursor-pointer ${color === activeColor ? 'ring-2 ring-blue-500' : 'border border-gray-300'}`}
+              style={{ backgroundColor: color }}
+              onClick={() => {
+                handleColorChange(color);
+                // Don't close the popover automatically - let user explicitly close it
+              }}
+            />
+          ))}
+        </div>
+        <div>
+          <input 
+            type="color" 
+            value={activeColor} 
+            onChange={(e) => {
+              handleColorChange(e.target.value);
+              // Don't close the popover automatically
+            }} 
+            className="w-full" 
+          />
+        </div>
+        <Button 
+          className="w-full mt-2" 
+          size="sm" 
+          onClick={() => {
+            setShowColorPicker(false);
+            setPickerSource(null);
+          }}
+        >
+          Close
+        </Button>
+      </div>
     );
   };
 
@@ -367,8 +571,10 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               position: 'absolute'
             }}
             onDoubleClick={handleDoubleClick}
-            onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
-            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onMouseDown={(e) => { if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             {isEditing ? (
               <textarea
@@ -402,7 +608,9 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
             }}
             onDoubleClick={handleDoubleClick}
             onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
-            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             {isEditing ? (
               <textarea
@@ -463,10 +671,9 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               e.preventDefault(); // Prevent browser drag operation
               if (!readOnly) onSelectElement(element.id); 
             }}
-            onTouchStart={(e) => { 
-              e.preventDefault(); // Prevent browser drag operation
-              if (!readOnly) onSelectElement(element.id); 
-            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             <img
               src={element.imageUrl}
@@ -532,7 +739,9 @@ const CanvasElement: React.FC<CanvasElementProps> = ({
               position: 'absolute'
             }}
             onMouseDown={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
-            onTouchStart={(e) => { /* Removed stopPropagation */ if (!readOnly) onSelectElement(element.id); }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             <svg width="100%" height="100%" viewBox={`0 0 ${element.width || 100} ${element.height || 100}`}>
               {element.shapeType === 'circle' && (

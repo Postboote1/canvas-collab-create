@@ -95,14 +95,40 @@ class PocketBaseService {
         const controller = new AbortController();
         this.activeRequests.set(cancelKey, controller);
         
-        // Use it for the request
+        // Check if it's a mobile device to optimize response
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          typeof navigator !== 'undefined' ? navigator.userAgent : ''
+        );
+        
+        // Use it for the request with mobile-specific optimizations
         const record = await this.client.collection('canvases').getOne(id, {
           $cancelKey: cancelKey,
-          expand: 'user'
+          expand: 'user',
+          // On mobile, use batch loading to reduce memory pressure
+          batch: isMobileDevice ? 100 : 0,
+          // If on mobile, only request essential fields initially
+          fields: isMobileDevice ? 'id,name,data.isInfinite,joinCode,user' : undefined
         });
         
         // Clean up on success
         this.activeRequests.delete(cancelKey);
+        
+        // For mobile devices, perform a delayed load of canvas elements
+        if (isMobileDevice && record) {
+          // If this is a mobile device and we have limited fields, 
+          // fetch elements in the background asynchronously
+          setTimeout(async () => {
+            try {
+              await this.client.collection('canvases').getOne(id, {
+                fields: 'data.elements',
+                $autoCancel: false
+              });
+            } catch (e) {
+              // Silently fail on background fetch
+            }
+          }, 500);
+        }
+        
         return record;
       } catch (error) {
         // Check if it's an abort error - don't report those
