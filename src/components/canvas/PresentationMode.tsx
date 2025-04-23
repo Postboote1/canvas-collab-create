@@ -305,9 +305,9 @@ const PresentationMode: React.FC = () => {
   };
   
   const handleExit = () => {
-    if (currentCanvas) {
-      localStorage.setItem('pendingCanvasState', JSON.stringify(currentCanvas));
-    }
+    //if (currentCanvas) {
+    //  localStorage.setItem('pendingCanvasState', JSON.stringify(currentCanvas));
+    //}
     navigate('/canvas');
   };
   
