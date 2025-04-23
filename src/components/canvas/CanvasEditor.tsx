@@ -360,14 +360,15 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
       setDrawingPoints([{ x, y }]); // Start drawing
       e.preventDefault(); // Prevent scrolling while drawing
     }
-    // Simulate mouse down for other tools or selection/dragging
+    // Handle other tools with more generous touch targets
     else if (activeTool === 'select' || activeTool === 'arrow') {
-       const mouseEvent = new MouseEvent('mousedown', {
-         clientX: touch.clientX,
-         clientY: touch.clientY,
-         button: 0 // Simulate left click
-       });
-       handleCanvasMouseDown(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+      const mouseEvent = new MouseEvent('mousedown', {
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        button: 0 // Simulate left click
+      });
+      handleCanvasMouseDown(mouseEvent as unknown as React.MouseEvent<HTMLDivElement>);
+      e.preventDefault(); // Prevent scrolling while selecting
     }
   };
 
@@ -1028,17 +1029,19 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ readOnly = false }) => {
 
   return (
     <div className="flex flex-col h-full canvas-theme-aware">
-      <CanvasToolbar
-        activeTool={activeTool}
-        setActiveTool={setActiveTool}
-        onSave={() => saveCanvas()}
-        onImageUpload={handleImageUpload}
-        readOnly={readOnly}
-        scale={scale}
-        setScale={setScale}
-        activeColor={activeColor}
-        setActiveColor={setActiveColor}
-      />
+      <div className="overflow-x-auto pb-2">
+        <CanvasToolbar
+          activeTool={activeTool}
+          setActiveTool={setActiveTool}
+          onSave={() => saveCanvas()}
+          onImageUpload={handleImageUpload}
+          readOnly={readOnly}
+          scale={scale}
+          setScale={setScale}
+          activeColor={activeColor}
+          setActiveColor={setActiveColor}
+        />
+      </div>
 
       <div
         className="relative flex-grow overflow-hidden cursor-grab active:cursor-grabbing"

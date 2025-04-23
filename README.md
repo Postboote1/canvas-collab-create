@@ -60,6 +60,15 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Mobile Support
+
+This project has been optimized for mobile devices with:
+- Responsive layouts for all screen sizes
+- Touch-friendly controls for the canvas editor
+- Mobile-optimized navigation with a hamburger menu on small screens
+- Larger touch targets for better usability
+- Simplified UI on small screens to focus on essential features
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/364d1d78-e7a4-4dd7-8181-98048e9f3d4a) and click on Share -> Publish.

@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Share, Copy, CheckCircle, Loader2, Link, QrCode } from 'lucide-react';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const CanvasShare: React.FC = () => {
   const [copied, setCopied] = useState(false);
@@ -14,6 +15,7 @@ const CanvasShare: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const { peerId, isPeerInitialized, generateShareLink, generateQRCode, initializePeer } = useWebSocket();
+  const isMobile = useIsMobile();
   
   const handleOpenShareDialog = async () => {
     setIsDialogOpen(true);
@@ -81,17 +83,17 @@ const CanvasShare: React.FC = () => {
           {isInitializing ? (
             <>
               <Loader2 size={16} className="animate-spin" />
-              Initializing...
+              {!isMobile && "Initializing..."}
             </>
           ) : (
             <>
               <Share size={16} />
-              Share
+              {!isMobile && "Share"}
             </>
           )}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={`sm:max-w-md ${isMobile ? 'w-[95vw] p-4' : ''}`}>
         <DialogHeader>
           <DialogTitle>Share Canvas</DialogTitle>
           <DialogDescription>
@@ -115,7 +117,7 @@ const CanvasShare: React.FC = () => {
           </div>
         ) : (
           <Tabs defaultValue="code" className="mt-4">
-            <TabsList className="grid grid-cols-3 mb-4">
+            <TabsList className={`grid grid-cols-3 mb-4 ${isMobile ? 'text-xs' : ''}`}>
               <TabsTrigger value="code">Peer ID</TabsTrigger>
               <TabsTrigger value="link">Share Link</TabsTrigger>
               <TabsTrigger value="qrcode">QR Code</TabsTrigger>
@@ -186,11 +188,11 @@ const CanvasShare: React.FC = () => {
                     <img 
                       src={generateQRCode()} 
                       alt="QR Code for joining canvas" 
-                      className="w-48 h-48"
+                      className={isMobile ? "w-36 h-36" : "w-48 h-48"}
                     />
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center w-48 h-48 bg-gray-100 rounded-lg">
+                  <div className={`flex flex-col items-center justify-center bg-gray-100 rounded-lg ${isMobile ? "w-36 h-36" : "w-48 h-48"}`}>
                     <Loader2 size={32} className="animate-spin text-gray-400" />
                     <p className="mt-2 text-sm text-gray-500">Initializing...</p>
                   </div>

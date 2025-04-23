@@ -1,97 +1,117 @@
-
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import Layout from '@/components/layout/Layout';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { AtSign, Lock } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  
+  const [error, setError] = useState<string | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    
-    if (!email || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
-    
+    setError(null);
     setIsLoading(true);
-    const success = await login(email, password);
-    setIsLoading(false);
     
-    if (success) {
-      navigate('/dashboard');
-    } else {
-      setError('Invalid email or password');
+    try {
+      const success = await login(email, password);
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        setError('Invalid credentials');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('An error occurred during login');
+      toast.error('Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
   
   return (
-    
-      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Log in to CanvasCollab</h1>
+    <div className="container px-4 py-4 flex items-center justify-center min-h-[calc(100vh-64px)]">
+      <Card className={`w-full ${isMobile ? 'max-w-sm mt-0' : 'max-w-md'} shadow-lg animate-fade-in`}>
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+          <CardDescription>Enter your credentials to login</CardDescription>
+        </CardHeader>
         
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded">
+          <div className="mx-6 mb-4 px-4 py-3 rounded bg-red-100 border border-red-200 text-red-600 text-sm">
             {error}
           </div>
         )}
         
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-sm font-medium mb-1">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          
-          <Button 
-            type="submit" 
-            className="w-full" 
-            disabled={isLoading}
-          >
-            {isLoading ? 'Logging in...' : 'Log In'}
-          </Button>
-        </form>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <div className="relative">
+                <AtSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
+            </div>
+            
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading}
+            >
+              {isLoading ? 'Logging in...' : 'Log In'}
+            </Button>
+          </form>
+        </CardContent>
         
-        <div className="mt-6 text-center text-sm">
-          <p>
-            Don't have an account?{' '}
-            <Link to="/register" className="text-canvas-blue hover:underline">
-              Sign up
+        <CardFooter className="flex flex-col space-y-4 mt-2">
+          <div className="text-center text-sm">
+            <p>
+              Don't have an account?{' '}
+              <Link to="/register" className="text-canvas-blue hover:underline">
+                Sign up
+              </Link>
+            </p>
+          </div>
+          
+          <div className="text-center text-sm">
+            <Link to="/forgot-password" className="text-muted-foreground hover:underline">
+              Forgot your password?
             </Link>
-          </p>
-        </div>
-      </div>
-   
+          </div>
+        </CardFooter>
+      </Card>
+    </div>
   );
 };
 

@@ -1,4 +1,3 @@
-
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
@@ -16,6 +15,10 @@ export default defineConfig(({ mode }) => ({
     },
     host: "::",
     port: 8080,
+    // Enable mobile testing by making the server accessible on your local network
+    hmr: {
+      host: 'localhost',
+    }
   },
   plugins: [
     react(),

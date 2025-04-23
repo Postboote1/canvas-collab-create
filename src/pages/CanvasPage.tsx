@@ -10,6 +10,7 @@ import { useWebSocket } from '@/contexts/WebSocketContext';
 import { Helmet } from 'react-helmet';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const CanvasPage: React.FC = () => {
   const { currentCanvas, saveCurrentCanvasToAccount, setCurrentCanvas } = useCanvas();
@@ -17,6 +18,7 @@ const CanvasPage: React.FC = () => {
   const { isConnected } = useWebSocket();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
+  const isMobile = useIsMobile();
   
   // Move these state hooks to the top level of the component
   const [loadAttempts, setLoadAttempts] = useState(0);
@@ -163,49 +165,49 @@ const CanvasPage: React.FC = () => {
       </Helmet>
       
       <div className="h-screen flex flex-col dark:bg-zinc-900">
-        <div className="bg-card border-b py-2 px-4 flex items-center justify-between dark:border-zinc-700">
+        <div className="bg-card border-b py-2 px-2 md:px-4 flex items-center justify-between dark:border-zinc-700">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold truncate max-w-xs">
+            <h1 className="font-medium text-sm md:text-base truncate max-w-[150px] md:max-w-xs">
               {currentCanvas.name}
             </h1>
             {isAnonymous && (
-              <span className="text-sm text-muted-foreground">(Temporary)</span>
+              <span className="text-xs md:text-sm text-muted-foreground">(Temporary)</span>
             )}
           </div>
           
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 md:gap-2 flex-wrap">
             {isAnonymous && (
               <Button
                 variant="default"
-                size="sm"
-                className="flex items-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                size={isMobile ? "sm" : "default"}
+                className="flex items-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs md:text-sm"
                 onClick={handleSaveToAccount}
                 disabled={isSaving}
               >
-                <Save size={16} />
-                {isSaving ? 'Saving...' : 'Save to Account'}
+                <Save size={isMobile ? 14 : 16} />
+                {isMobile ? '' : (isSaving ? 'Saving...' : 'Save to Account')}
               </Button>
             )}
             
             <Button
               variant="outline"
-              size="sm"
-              className="flex items-center gap-1 bg-blue-500 text-white hover:bg-blue-600"
+              size={isMobile ? "sm" : "default"}
+              className="flex items-center gap-1 bg-blue-500 text-white hover:bg-blue-600 text-xs md:text-sm"
               onClick={() => navigate('/presentation')}
             >
-              <Play size={16} />
-              Present
+              <Play size={isMobile ? 14 : 16} />
+              {!isMobile && "Present"}
             </Button>
             
             <CanvasShare />
             
             <Button
               variant="outline"
-              size="sm"
-              className="bg-gray-700 text-white hover:bg-gray-800"
+              size={isMobile ? "sm" : "default"}
+              className="bg-gray-700 text-white hover:bg-gray-800 text-xs md:text-sm"
               onClick={() => navigate('/')}
             >
-              Exit
+              {isMobile ? "Exit" : "Back to Home"}
             </Button>
           </div>
         </div>

@@ -1,16 +1,30 @@
 #root {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
 }
 
+@media (min-width: 640px) {
+  #root {
+    padding: 2rem;
+  }
+}
+
 .logo {
-  height: 6em;
-  padding: 1.5em;
+  height: 4em;
+  padding: 1em;
   will-change: filter;
   transition: filter 300ms;
 }
+
+@media (min-width: 640px) {
+  .logo {
+    height: 6em;
+    padding: 1.5em;
+  }
+}
+
 .logo:hover {
   filter: drop-shadow(0 0 2em #646cffaa);
 }
@@ -33,10 +47,41 @@
   }
 }
 
+/* Mobile-specific animations */
+@media (max-width: 640px) {
+  @keyframes logo-spin {
+    from {
+      transform: rotate(0deg) scale(0.9);
+    }
+    to {
+      transform: rotate(360deg) scale(0.9);
+    }
+  }
+}
+
 .card {
-  padding: 2em;
+  padding: 1em;
+}
+
+@media (min-width: 640px) {
+  .card {
+    padding: 2em;
+  }
 }
 
 .read-the-docs {
   color: #888;
+}
+
+/* Mobile touch improvements */
+@media (max-width: 640px) {
+  button, a, .clickable {
+    min-height: 44px; /* Minimum touch target size */
+    min-width: 44px;
+  }
+  
+  input[type="checkbox"], input[type="radio"] {
+    min-height: 24px;
+    min-width: 24px;
+  }
 }

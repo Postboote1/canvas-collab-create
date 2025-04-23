@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Layout from '@/components/layout/Layout';
 import { pb } from '@/services/pocketbaseService';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Card} from '@/components/ui/card';
 
 const RegisterPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -15,6 +16,7 @@ const RegisterPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [registrationAllowed, setRegistrationAllowed] = useState(true);
+  const isMobile = useIsMobile();
   
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -91,8 +93,8 @@ const RegisterPage: React.FC = () => {
   }
   
   return (
-    
-      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-lg shadow-md">
+    <div className="container px-4 py-4 flex items-center justify-center min-h-[calc(100vh-64px)]">
+      <Card className={`w-full ${isMobile ? 'max-w-sm mt-0' : 'max-w-md'} shadow-lg animate-fade-in`}>
         <h1 className="text-2xl font-bold mb-6 text-center">Create an Account</h1>
         
         {error && (
@@ -174,8 +176,8 @@ const RegisterPage: React.FC = () => {
             </Link>
           </p>
         </div>
-      </div>
-    
+      </Card>
+    </div>
   );
 };
 

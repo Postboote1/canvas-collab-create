@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -8,6 +7,7 @@ import { toast } from 'sonner';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCanvas } from '@/contexts/CanvasContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const CreateCanvasPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -17,6 +17,7 @@ const CreateCanvasPage: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
   const { createCanvas, userCanvases } = useCanvas();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   
   // Redirect if not logged in
   useEffect(() => {
@@ -58,9 +59,9 @@ const CreateCanvasPage: React.FC = () => {
   }
   
   return (
-    
-      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Create New Canvas</h1>
+    <div className="container px-4 py-4 flex flex-col items-center justify-center min-h-[calc(100vh-64px)]">
+      <div className={`w-full ${isMobile ? 'max-w-sm mt-0' : 'max-w-md'}`}>
+        <h1 className="text-2xl font-bold mb-4 text-center">Create New Canvas</h1>
         
         <form onSubmit={handleSubmit}>
           <div className="mb-6">
@@ -105,7 +106,7 @@ const CreateCanvasPage: React.FC = () => {
           </Button>
         </form>
       </div>
-    
+    </div>
   );
 };
 

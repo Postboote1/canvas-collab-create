@@ -37,6 +37,7 @@ import {
   TooltipProvider, 
   TooltipTrigger 
 } from '@/components/ui/tooltip';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CanvasToolbarProps {
   activeTool: 'select' | 'card' | 'text' | 'draw' | 'image' | 'arrow' | 'circle' | 'triangle' | 'diamond';
@@ -64,6 +65,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const { exportAsImage, exportAsPDF, exportCanvasData, importCanvasData, clearCanvas, currentCanvas } = useCanvas();
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+  const isMobile = useIsMobile();
   
   const tools = [
     { name: 'Select', tool: 'select' as const, icon: <MousePointer size={18} />, tooltip: 'Select and move objects' },
@@ -150,7 +152,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   return (
     <TooltipProvider delayDuration={300}>
       <Card className="border-b bg-card shadow-sm">
-        <CardContent className="p-2 flex flex-wrap items-center justify-between gap-2">
+        <CardContent className={`p-2 flex flex-wrap items-center justify-between gap-2 ${isMobile ? 'overflow-x-auto' : ''}`}>
           <div className="flex flex-wrap gap-1">
             {!readOnly && (
               <div className="flex flex-wrap items-center p-1 bg-muted/20 rounded-md">
@@ -159,11 +161,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                     <TooltipTrigger asChild>
                       <Button
                         variant={activeTool === tool ? 'default' : 'ghost'}
-                        size="sm"
+                        size={isMobile ? 'sm' : 'default'}
                         onClick={() => handleToolClick(tool)}
                         className={`h-8 px-2 ${activeTool === tool ? 'bg-primary text-primary-foreground' : ''}`}
                       >
                         {icon}
+                        {!isMobile && <span>{name}</span>}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">{tooltip}</TooltipContent>
@@ -177,7 +180,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size={isMobile ? 'sm' : 'default'}
                     className="relative h-8"
                   >
                     <Palette size={18} />
@@ -247,12 +250,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size={isMobile ? 'sm' : 'default'}
                       onClick={onSave}
                       className="h-8 bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       <Save size={18} className="mr-1" />
-                      Save
+                      {!isMobile && <span>Save</span>}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Save Canvas</TooltipContent>
@@ -262,12 +265,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size={isMobile ? 'sm' : 'default'}
                       onClick={handleClearCanvas}
                       className="h-8 bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
                       <Trash size={18} className="mr-1" />
-                      Clear
+                      {!isMobile && <span>Clear</span>}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Clear Canvas</TooltipContent>
@@ -277,7 +280,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size={isMobile ? 'sm' : 'default'}
                       className="h-8 cursor-pointer"
                       onClick={() => {
                         const input = document.createElement('input');
@@ -290,7 +293,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                       }}
                     >
                       <Image size={18} className="mr-1" />
-                      Upload
+                      {!isMobile && <span>Upload</span>}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Upload Image</TooltipContent>
@@ -302,12 +305,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size={isMobile ? 'sm' : 'default'}
                   onClick={handleExportAsImage}
                   className="h-8 bg-blue-500 text-white hover:bg-blue-600"
                 >
                   <Download size={18} className="mr-1" />
-                  PNG
+                  {!isMobile && <span>PNG</span>}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Export as Image</TooltipContent>
@@ -317,12 +320,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size={isMobile ? 'sm' : 'default'}
                   onClick={handleExportAsPDF}
                   className="h-8 bg-red-500 text-white hover:bg-red-600"
                 >
                   <FileUp size={18} className="mr-1" />
-                  PDF
+                  {!isMobile && <span>PDF</span>}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Export as PDF</TooltipContent>
@@ -332,11 +335,11 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size={isMobile ? 'sm' : 'default'}
                   onClick={handleExportCanvas}
                   className="h-8 bg-green-500 text-white hover:bg-green-600"
                 >
-                  Export
+                  {!isMobile && <span>Export</span>}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Export Canvas</TooltipContent>
@@ -346,11 +349,11 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size={isMobile ? 'sm' : 'default'}
                   onClick={handleImportCanvas}
                   className="h-8 bg-purple-500 text-white hover:bg-purple-600"
                 >
-                  Import
+                  {!isMobile && <span>Import</span>}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Import Canvas</TooltipContent>
