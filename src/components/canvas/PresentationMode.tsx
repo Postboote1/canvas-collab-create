@@ -40,14 +40,12 @@ const PresentationMode: React.FC = () => {
       const result: string[] = [];
       const arrows = currentCanvas.elements.filter(el => el.type === 'arrow');
       
-      // If no arrows, just return first card or image
+      // If no arrows, just return all cards/images in their original order
       if (arrows.length === 0) {
-        const firstCard = currentCanvas.elements.find(
+        const cardsAndImages = currentCanvas.elements.filter(
           el => el.type === 'card' || el.type === 'image'
         );
-        if (firstCard) {
-          result.push(firstCard.id);
-        }
+        cardsAndImages.forEach(el => result.push(el.id));
         return result;
       }
       
@@ -57,23 +55,24 @@ const PresentationMode: React.FC = () => {
         .filter(a => !allDestinations.has(a.fromId))
         .map(a => a.fromId);
       
-      // Use the first start element or any card if no clear start
-      let startNode: string | undefined;
-      if (possibleStarts.length > 0) {
-        startNode = possibleStarts[0]!;
-      } else {
+      // If no clear starting points were found
+      if (possibleStarts.length === 0) {
+        // Just use any card as a starting point
         const firstCard = currentCanvas.elements.find(
           el => el.type === 'card' || el.type === 'image'
         );
         if (firstCard) {
-          startNode = firstCard.id;
-        } else {
+          result.push(firstCard.id);
           return result;
         }
+        return [];
       }
       
       // Build a map of nodes to their outgoing connections
       const outgoingArrows = new Map<string, Array<{toId: string, angle: number}>>();
+      
+      // Build a map of incoming connections to track multiple approaches
+      const incomingArrows = new Map<string, string[]>();
       
       // Calculate angle for each arrow
       arrows.forEach(arrow => {
@@ -119,6 +118,12 @@ const PresentationMode: React.FC = () => {
           outgoingArrows.set(arrow.fromId, []);
         }
         outgoingArrows.get(arrow.fromId)!.push({ toId: arrow.toId, angle });
+        
+        // Add to incomingArrows map
+        if (!incomingArrows.has(arrow.toId)) {
+          incomingArrows.set(arrow.toId, []);
+        }
+        incomingArrows.get(arrow.toId)!.push(arrow.fromId);
       });
       
       // Sort outgoing arrows by angle (leftmost first)
@@ -126,19 +131,97 @@ const PresentationMode: React.FC = () => {
         arrows.sort((a, b) => a.angle - b.angle);
       });
       
-      // Track visited nodes and forks (nodes with multiple outgoing arrows)
+      // Track visited nodes and edges to avoid cycles
       const visited = new Set<string>();
+      const visitedEdges = new Set<string>(); // Track source→destination pairs
       const forks = new Map<string, number>(); // Maps fork nodes to their index in result array
+      
+      // Track merge points (nodes with multiple incoming arrows)
+      const mergeNodes = new Map<string, {
+        totalIncoming: number,
+        visitedCount: number,
+        shouldProceed: boolean,
+        processedOutgoing: boolean,
+        incomingPaths: Set<string> // Keep track of which specific paths we've seen
+      }>();
+      
+      // Identify merge nodes and initialize their tracking state
+      incomingArrows.forEach((sources, nodeId) => {
+        if (sources.length > 1) {
+          mergeNodes.set(nodeId, {
+            totalIncoming: sources.length,
+            visitedCount: 0,
+            shouldProceed: false,
+            processedOutgoing: false,
+            incomingPaths: new Set<string>()
+          });
+        }
+      });
   
-      // Build path with fork handling and complete path traversal
-      const buildPath = (nodeId: string) => {
+      // Build path with improved handling of multiple incoming arrows
+      const buildPath = (nodeId: string, fromId: string | null = null, pathStack: string[] = []) => {
         if (!nodeId) return;
         
-        // Add current node to result if not visited
-        if (!result.includes(nodeId)) {
+        // Create a unique edge identifier for the current edge
+        const edgeKey = fromId ? `${fromId}→${nodeId}` : `start→${nodeId}`;
+        
+        // Skip if we've already traversed this specific edge
+        if (visitedEdges.has(edgeKey)) return;
+        visitedEdges.add(edgeKey);
+        
+        // Add the current node to our path stack
+        pathStack.push(nodeId);
+        
+        // Check if this is a merge node (node with multiple incoming arrows)
+        const mergeNodeInfo = mergeNodes.get(nodeId);
+        
+        if (mergeNodeInfo) {
+          // Increment the visited count for this merge node
+          mergeNodeInfo.visitedCount += 1;
+          
+          // Track this specific incoming path
+          if (fromId) {
+            mergeNodeInfo.incomingPaths.add(fromId);
+          }
+          
+          // Always add the merge node to the result path when we reach it via a new path
+          // This ensures it appears at the correct point in the presentation for each path
           result.push(nodeId);
+          
+          // Update the merge node info in our map
+          const shouldProceed = mergeNodeInfo.visitedCount >= mergeNodeInfo.totalIncoming;
+          mergeNodes.set(nodeId, {
+            ...mergeNodeInfo,
+            shouldProceed
+          });
+          
+          // If we haven't visited all incoming paths to this merge node yet,
+          // don't proceed further along this path
+          if (!shouldProceed) {
+            return;
+          }
+          
+          // If we already processed outgoing paths from this merge node, just return
+          if (mergeNodeInfo.processedOutgoing) {
+            return;
+          }
+          
+          // Mark that we're now processing the outgoing paths
+          mergeNodes.set(nodeId, {
+            ...mergeNodeInfo,
+            shouldProceed: true,
+            processedOutgoing: true
+          });
+          
+          // Continue processing outgoing paths below
+          visited.add(nodeId);
+        } else {
+          // Add the node to the result path if not already visited
+          if (!visited.has(nodeId)) {
+            result.push(nodeId);
+            visited.add(nodeId);
+          }
         }
-        visited.add(nodeId);
         
         // Get outgoing connections
         const outgoing = outgoingArrows.get(nodeId) || [];
@@ -167,17 +250,59 @@ const PresentationMode: React.FC = () => {
             result.push(forkId);
           }
           
-          // Follow this path completely
-          if (!visited.has(toId)) {
-            buildPath(toId);
-          }
+          // Follow this path, passing current node as the source
+          buildPath(toId, nodeId, [...pathStack]);
         }
       };
       
-      // Start building the path
-      buildPath(startNode);
+      // Process each starting node to build complete paths
+      for (const startNode of possibleStarts) {
+        // Only process this start node if we haven't visited it already
+        if (!visited.has(startNode)) {
+          buildPath(startNode);
+        }
+      }
       
-      return result;
+      // Final pass: Check for any merge nodes that have all incoming paths visited
+      // but haven't processed their outgoing paths yet
+      let addedNewPaths = false;
+      do {
+        addedNewPaths = false;
+        
+        // Look for merge nodes that should proceed but haven't processed outgoing paths
+        for (const [nodeId, info] of mergeNodes.entries()) {
+          if (info.shouldProceed && !info.processedOutgoing) {
+            // Process the outgoing paths from this merge node
+            const outgoing = outgoingArrows.get(nodeId) || [];
+            if (outgoing.length > 0) {
+              addedNewPaths = true;
+              // Mark as processed
+              mergeNodes.set(nodeId, { ...info, processedOutgoing: true });
+              
+              // Add the node again if necessary before following its outgoing paths
+              if (!result.includes(nodeId)) {
+                result.push(nodeId);
+              }
+              
+              // Follow all outgoing paths
+              for (const { toId } of outgoing) {
+                buildPath(toId, nodeId);
+              }
+            }
+          }
+        }
+      } while (addedNewPaths);
+      
+      // Remove consecutive duplicates from the result path
+      // This ensures we don't have the same node appearing twice in a row
+      const finalPath: string[] = [];
+      for (let i = 0; i < result.length; i++) {
+        if (i === 0 || result[i] !== result[i-1]) {
+          finalPath.push(result[i]);
+        }
+      }
+      
+      return finalPath;
     };
     
     const path = buildPresentationPath();
@@ -305,9 +430,6 @@ const PresentationMode: React.FC = () => {
   };
   
   const handleExit = () => {
-    //if (currentCanvas) {
-    //  localStorage.setItem('pendingCanvasState', JSON.stringify(currentCanvas));
-    //}
     navigate('/canvas');
   };
   
