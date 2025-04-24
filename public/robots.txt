@@ -12,3 +12,7 @@ Allow: /
 
 User-agent: *
 Allow: /
+Sitemap: https://canvascollab.com/sitemap.xml
+
+# Define favicon location explicitly for crawlers
+Favicon: /favicon.ico
