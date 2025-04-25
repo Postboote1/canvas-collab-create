@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { pb } from '@/services/pocketbaseService';
 import { toast } from 'sonner';
@@ -18,7 +17,7 @@ interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (username: string, email: string, password: string) => Promise<boolean>;
+  register: (username: string, email: string, password: string, passwordConfirm: string) => Promise<boolean>;
   logout: () => void;
   isLoggedIn: () => boolean;
   refreshUserData: () => Promise<void>;
@@ -83,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (username: string, email: string, password: string): Promise<boolean> => {
+  const register = async (username: string, email: string, password: string, passwordConfirm: string): Promise<boolean> => {
     try {
       // Check if registration is allowed
       const settings = await pb.getSettings();
@@ -100,7 +99,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         username,
         email,
         password,
-        passwordConfirm: password,
+        passwordConfirm,
+        emailVisibility: true,  // Add this field to fix the error
         role: 'user',
         canvasLimit,
         storageLimit,

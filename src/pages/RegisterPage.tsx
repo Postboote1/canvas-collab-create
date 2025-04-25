@@ -64,7 +64,7 @@ const RegisterPage: React.FC = () => {
     }
     
     setIsLoading(true);
-    const success = await register(username, email, password);
+    const success = await register(username, email, password, confirmPassword);
     setIsLoading(false);
     
     if (success) {
@@ -74,7 +74,7 @@ const RegisterPage: React.FC = () => {
   
   if (!registrationAllowed) {
     return (
-      <Layout>
+      
         <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-lg shadow-md">
           <h1 className="text-2xl font-bold mb-6 text-center">Registration Disabled</h1>
           <p className="text-center text-gray-600 mb-6">
@@ -88,7 +88,7 @@ const RegisterPage: React.FC = () => {
             Go to Login
           </Button>
         </div>
-      </Layout>
+      
     );
   }
   
