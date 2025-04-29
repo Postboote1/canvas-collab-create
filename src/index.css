@@ -73,7 +73,7 @@
   body {
     @apply bg-background text-foreground;
     /* Prevent browser handling of touch gestures */
-    touch-action: none;
+    touch-action: pan-y;
     overflow-x: hidden;
     height: 100%;
   }
@@ -328,6 +328,7 @@ body, .bg-background, .bg-card, .bg-muted, .text-foreground,
   .mobile-toolbar {
     flex-shrink: 0;
     overflow-x: auto;
+    touch-action: pan-x;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x mandatory;
     scroll-behavior: smooth;
